@@ -25,6 +25,7 @@ TasksMax=64
 LimitNOFILE=1024
 StandardOutput=journal
 StandardError=journal
+LogNamespace=scout
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=200
 

@@ -13,9 +13,11 @@ try {
   db.transaction(() => {
     db.prepare('DELETE FROM sessions').run();
     if (db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'publication_previews'").get()) db.prepare('DELETE FROM publication_previews').run();
+    // Old backups must never silently resurrect reports revoked after the backup.
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'publications'").get()) db.prepare('UPDATE publications SET revoked_at = coalesce(revoked_at, CURRENT_TIMESTAMP)').run();
     db.prepare("UPDATE tasks SET status = 'INTERRUPTED' WHERE status IN ('QUEUED','RUNNING')").run();
     db.prepare("UPDATE usage SET state = 'UNKNOWN' WHERE state = 'RESERVED'").run();
   })();
   db.pragma('wal_checkpoint(TRUNCATE)');
 } finally { db.close(); }
-console.log('Restored into a NEW database; sessions and previews cleared, unfinished tasks interrupted. Stop the service before selecting this database.');
+console.log('Restored into a NEW database; sessions/previews cleared, publications revoked, unfinished tasks interrupted. Stop the service before selecting this database; re-preview before publishing again.');

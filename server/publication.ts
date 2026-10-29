@@ -20,7 +20,7 @@ export function redactPublicText(value: string, secrets: string[] = []) {
     .replace(/\b(?:api[_ -]?key|password|secret|token|authorization)\s*[:=]\s*(?:Bearer\s+)?["']?[^\s"'<>;,]+/gi, '[REDACTED]')
     .replace(/\bhttps?:\/\/[^\s<>"']+/gi, '[链接已省略]')
     .replace(/\b[A-Za-z]:[\\/][^\s<>"'`]+/g, '[私有路径已省略]')
-    .replace(/(?:^|[\s("'])\/(?:home|Users|root|etc|var|opt|tmp|mnt|private)(?:\/[^\s<>"'`)]+)+/gm, ' [私有路径已省略]')
+    .replace(/(^|[^A-Za-z0-9_])\/(?:home|Users|root|etc|var|opt|tmp|mnt|private|srv|workspace|workspaces|app|data)(?:\/[^\s<>"'`)]+)+/gm, '$1[私有路径已省略]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[邮箱已省略]')
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
@@ -110,7 +110,7 @@ export class PublicationService {
   }
   list(page = 1) {
     const rows = this.db.prepare('SELECT * FROM publications WHERE revoked_at IS NULL ORDER BY published_at DESC, rowid DESC LIMIT 12 OFFSET ?').all((page - 1) * 12) as Publication[];
-    return { page, pageSize: 12, items: rows.filter(row => this.readable(row)).map(row => { const value: PublicSnapshot = JSON.parse(row.content); return { id: row.id, title: value.title, summary: value.summary.slice(0, 240), repo: value.repo, source: value.source, hasPatch: value.hasPatch, publishedAt: row.published_at }; }) };
+    return { page, pageSize: 12, hasMore: rows.length === 12, items: rows.filter(row => this.readable(row)).map(row => { const value: PublicSnapshot = JSON.parse(row.content); return { id: row.id, title: value.title, summary: value.summary.slice(0, 240), repo: value.repo, source: value.source, hasPatch: value.hasPatch, publishedAt: row.published_at }; }) };
   }
   read(id: string) {
     const row = this.db.prepare('SELECT * FROM publications WHERE id = ? AND revoked_at IS NULL').get(id) as Publication | undefined;

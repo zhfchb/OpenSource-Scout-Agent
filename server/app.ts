@@ -48,7 +48,7 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
     try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M3' }; }
     catch { return reply.code(503).send({ status: 'unhealthy', database: 'unavailable' }); }
   });
-  app.get<{ Querystring: { page?: number } }>('/api/public/reports', { schema: { querystring: { type: 'object', additionalProperties: false, properties: { page: { type: 'string', pattern: '^[1-9][0-9]{0,2}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.list(Number(req.query.page || 1)));
+  app.get<{ Querystring: { page?: string } }>('/api/public/reports', { schema: { querystring: { type: 'object', additionalProperties: false, properties: { page: { type: 'string', pattern: '^[1-9][0-9]{0,2}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.list(Number(req.query.page || 1)));
   app.get<{ Params: { id: string } }>('/api/public/reports/:id', { schema: { params: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[a-f0-9-]{36}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.read(req.params.id));
   app.post<{ Body: { password: string } }>('/api/auth/login', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
@@ -91,7 +91,7 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
     admin.post('/operations/cleanup', { schema: { body: { type: 'object', additionalProperties: false } } }, async () => storage.cleanup());
     admin.get<{ Params: { id: string } }>('/tasks/:id/publication', { schema: { params: taskParams } }, async req => publications.defaults(req.params.id));
     const publicDraftSchema = { type: 'object', additionalProperties: false, required: ['title', 'summary', 'rationale', 'uncertainties'], properties: { title: { type: 'string', minLength: 1, maxLength: 160 }, summary: { type: 'string', minLength: 1, maxLength: 4000 }, rationale: { type: 'string', minLength: 1, maxLength: 4000 }, uncertainties: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 500 } } } };
-    admin.post<{ Params: { id: string }; Body: PublicDraft }>('/tasks/:id/publication/preview', { schema: { params: taskParams, body: publicDraftSchema } }, async req => publications.preview(req.params.id, req.body));
+    admin.post<{ Params: { id: string }; Body: PublicDraft }>('/tasks/:id/publication/preview', { bodyLimit: 65536, schema: { params: taskParams, body: publicDraftSchema } }, async req => publications.preview(req.params.id, req.body));
     admin.post<{ Params: { id: string }; Body: { previewId: string; hash: string; confirmed: boolean } }>('/tasks/:id/publication/publish', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['previewId', 'hash', 'confirmed'], properties: { previewId: uuid, hash, confirmed: { const: true } } } } }, async req => publications.publish(req.params.id, req.body.previewId, req.body.hash, req.body.confirmed));
     admin.post<{ Params: { id: string } }>('/publications/:id/revoke', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false } } }, async req => publications.revoke(req.params.id));
     const binding = { type: 'object', additionalProperties: false, required: ['planId', 'hash', 'baseSha'], properties: { planId: uuid, hash, baseSha: sha } };

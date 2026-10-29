@@ -12,8 +12,9 @@
 .public-header { max-width: 1220px; margin: auto; padding: 22px 36px; height: 98px; border-bottom: 1px solid #d9e6f1; }
 .public-header .brand { text-decoration: none; color: #245a83; }
 .public-header .brand small { color: #6888a0; }
-.public-header nav { display: flex; align-items: center; gap: 28px; }
-.public-header nav a { color: #527b9b; text-decoration: none; font-size: 12px; }
+.public-header nav { display: flex; align-items: center; gap: 28px; flex-shrink: 0; }
+.public-header nav a { color: #527b9b; text-decoration: none; font-size: 12px; white-space: nowrap; }
+.public-header nav button { width: auto; margin: 0; white-space: nowrap; }
 .public-main { max-width: 1220px; margin: auto; padding: 36px; }
 .public-hero { position: relative; padding: 45px 0 55px; overflow: hidden; border-bottom: 1px solid var(--line); margin-bottom: 36px; }
 .public-hero h1 { position: relative; z-index: 1; font-size: clamp(34px,4vw,56px); line-height: 1.55; margin: 25px 0; letter-spacing: -1.5px; }

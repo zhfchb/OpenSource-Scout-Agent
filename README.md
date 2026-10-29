@@ -1,0 +1,46 @@
+# OpenSource Scout Agent
+
+个人开源贡献辅助工作台。当前实施 **v2.0 / M0**，以 [当前路线图](docs/开发路线图.md) 为准。
+
+Vue 3 + TypeScript + Fastify + SQLite，一个 Node 进程提供构建后的页面和 API。用户通过浏览器访问云端服务。
+
+## 当前可用
+
+- 管理员登录、持久会话、退出、登录限速、同源和 CSRF 检查。
+- 私有任务列表骨架；尚无任务创建、GitHub 或模型调用。
+- 模型标识、凭据环境变量引用和有界资源设置，SQLite WAL 和校验和迁移。
+- 健康检查 `/api/health`、结构化脱敏日志、Linux 单服务部署示例。
+
+目标代码仅作为不可信文本；应用没有 Shell、安装、构建、测试第三方项目或 GitHub 写入入口。未来补丁固定 `UNVERIFIED`，目标项目测试 `NOT_RUN`，手工 PR 信息 `MANUAL`。
+
+## 开发与验证
+
+已验证 Node **24.16.0**、npm **11.13.0**；依赖精确版本见 package-lock.json。生产使用 Node 24 LTS 的最新安全补丁，升级后重跑验证。开发用命令：
+
+```sh
+npm ci
+npm run typecheck
+npm run build
+npm test
+```
+
+本地调试正式构建：复制 `.env.example` 到 `.env`，设置 `NODE_ENV=development`、`APP_ORIGIN=http://127.0.0.1:3000`、`DB_PATH=data/scout.sqlite` 和生成后的密码 hash。运行 `npm start`，浏览器访问该地址。密码必须 12–256 字符；通过标准输入传给 `node scripts/hash-password.mjs`，避免把密码写进命令参数、终端历史或仓库。
+
+```sh
+# Linux: 输入不会显示；hash 输出后写入私有 .env，勿提交
+read -rs -p 'Admin password: ' scout_password
+printf '%s' "$scout_password" | node scripts/hash-password.mjs
+unset scout_password
+```
+
+PowerShell 可用 `Read-Host -MaskInput` 接收密码，再通过管道传给脚本；不要在命令中写真实密码。hash 在环境文件中用单引号包围。生产模式必须 HTTPS；只允许匹配 APP_ORIGIN 的 Origin 进行变更。会话有效期 1–24 小时，默认 12 小时，最多保留 20 个会话。修改管理员 hash 后应停止服务并清空 sessions 表，再重启。
+
+## Git 约定
+
+`main` 保存集成基线；每阶段使用 `feat/m0-foundation` 一类短期分支。修复使用 `fix/...`。采用 `docs:`、`build:`、`feat:`、`fix:`、`test:`、`ops:` 小提交；检查通过后经 PR 审核合入 main。禁止提交 `.env`、数据库、日志、node_modules 与构建产物。不自动开始后续阶段。
+
+本仓库开发所需 Git push 与产品的 GitHub 只读权限属于不同操作；产品不持有写入工具。
+
+## 部署与阶段证据
+
+见 [部署、备份与恢复](docs/部署运维.md)、[M0 验证记录](evidence/M0/验收记录.md)。Linux/systemd/HTTPS 和 2GB 容量仍需在真实云环境验证，本机结果不能替代这些验收。

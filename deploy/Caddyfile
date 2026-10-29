@@ -1,0 +1,6 @@
+scout.example.com {
+    encode gzip
+    reverse_proxy 127.0.0.1:3000
+    header Strict-Transport-Security "max-age=31536000"
+    # No access log: cookies, URLs and request bodies must not enter a public log.
+}

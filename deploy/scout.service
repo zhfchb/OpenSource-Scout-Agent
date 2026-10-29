@@ -1,0 +1,32 @@
+[Unit]
+Description=OpenSource Scout single application
+After=network.target
+
+[Service]
+Type=simple
+User=scout
+Group=scout
+WorkingDirectory=/opt/scout
+EnvironmentFile=/etc/scout/scout.env
+ExecStart=/usr/bin/node --max-old-space-size=384 /opt/scout/dist/server/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+StateDirectory=scout
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/scout
+MemoryMax=768M
+TasksMax=64
+LimitNOFILE=1024
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

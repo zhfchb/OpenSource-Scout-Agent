@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { openDatabase } from './db.js';
 import { constants, copyFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { verifyBackup } from './backup-integrity.js';
@@ -8,9 +8,11 @@ if ([target, `${target}-wal`, `${target}-shm`].some(existsSync) || source === ta
 await verifyBackup(source);
 mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
 copyFileSync(source, target, constants.COPYFILE_EXCL); chmodSync(target, 0o600);
-const db = new Database(target, { fileMustExist: true });
+const db = openDatabase(target);
 try {
   db.transaction(() => {
+    const nextUtcDay = (Math.floor(Date.now()/86400000)+1)*86400000;
+    db.prepare('UPDATE model_test_guard SET blocked_until_utc=max(blocked_until_utc,?) WHERE id=1').run(nextUtcDay);
     db.prepare('DELETE FROM sessions').run();
     if (db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'publication_previews'").get()) db.prepare('DELETE FROM publication_previews').run();
     // Old backups must never silently resurrect reports revoked after the backup.
@@ -20,4 +22,4 @@ try {
   })();
   db.pragma('wal_checkpoint(TRUNCATE)');
 } finally { db.close(); }
-console.log('Restored into a NEW database; sessions/previews cleared, publications revoked, unfinished tasks interrupted. Stop the service before selecting this database; re-preview before publishing again.');
+console.log('Restored into a NEW migrated database; sessions/previews cleared, publications revoked, unfinished work interrupted. Model probes blocked until next UTC day; provider billing remains authoritative. Stop the service before selecting this database; re-preview before publishing again.');

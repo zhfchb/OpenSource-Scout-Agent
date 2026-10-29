@@ -51,15 +51,20 @@ export function validateAnalysis(value: unknown, context: Snapshot): Analysis {
 }
 export class ModelClient {
   constructor(private transport: Transport = boundedJson, private env: NodeJS.ProcessEnv = process.env) {}
+  references(settings: Settings) { return {modelKeyPresent: Boolean(this.env[settings.modelKeyRef]), githubTokenPresent: Boolean(this.env[settings.githubTokenRef])}; }
+  checkSafeSettings(settings: Settings) {
+    if (/^(sk-|ghp_|github_pat_)/i.test(settings.model) || [this.env[settings.modelKeyRef], this.env[settings.githubTokenRef]].some(secret => secret && settings.model.includes(secret))) throw new DomainError('INVALID_MODEL_IDENTIFIER');
+  }
   available(settings: Settings) { return Boolean(settings.model && this.env[settings.modelKeyRef]); }
   private async request(systemMessage: string, input: unknown, settings: Settings, signal: AbortSignal, usage: (tokens: number | null) => void, outputTokens: number): Promise<unknown> {
+    this.checkSafeSettings(settings);
     const key = this.env[settings.modelKeyRef];
     if (!key || !settings.model) throw new DomainError('MODEL_NOT_CONFIGURED');
     // Single provider, fixed HTTPS endpoint. Never accept endpoint URLs from tasks.
     const response: any = await this.transport('https://api.deepseek.com/chat/completions', {
       method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: settings.model, messages: [{ role: 'system', content: systemMessage }, { role: 'user', content: JSON.stringify(input) }], response_format: { type: 'json_object' }, max_tokens: outputTokens, stream: false }),
-    }, Math.min(settings.maxArtifactBytes, 200000), settings.requestTimeoutMs);
+    }, outputTokens === 64 ? 16384 : Math.min(settings.maxArtifactBytes, 200000), outputTokens === 64 ? Math.min(settings.requestTimeoutMs, 30000) : settings.requestTimeoutMs);
     const tokens = response?.usage?.total_tokens;
     usage(Number.isSafeInteger(tokens) && tokens >= 0 ? tokens : null);
     const choice = response?.choices?.[0];
@@ -74,9 +79,18 @@ export class ModelClient {
   async analyze(context: Snapshot, settings: Settings, signal: AbortSignal, usage: (tokens: number | null) => void): Promise<Analysis> {
     return validateAnalysis(await this.request(system, context, settings, signal, usage, 2048), context);
   }
+  async probe(settings: Settings, signal: AbortSignal, usage: (tokens: number | null) => void) {
+    const value = await this.request(probeSystem, probeInput, settings, signal, usage, 64) as {ok?: unknown};
+    if (!value || typeof value !== 'object' || Object.keys(value).length !== 1 || value.ok !== true) throw new DomainError('INVALID_MODEL_OUTPUT', 502);
+  }
   async generatePatch(snapshot: Snapshot, analysis: Analysis, plan: PlanContent, settings: Settings, signal: AbortSignal, usage: (tokens: number | null) => void): Promise<PatchOutput> {
     const { input } = preparePatchRequest(snapshot, analysis, plan, settings);
     // Shape and diff validation happen before artifact persistence in the executor.
     return await this.request(patchSystem, input, settings, signal, usage, 4096) as PatchOutput;
   }
+}
+const probeSystem = 'Connection test. Return only the JSON object {"ok":true}.';
+const probeInput = {test: 'connection'};
+export function probeReservation(settings: Settings) {
+  return Buffer.byteLength(JSON.stringify({model: settings.model, messages: [{role:'system', content:probeSystem},{role:'user',content:JSON.stringify(probeInput)}], response_format:{type:'json_object'}, max_tokens:64, stream:false}), 'utf8') + 128 + 64;
 }

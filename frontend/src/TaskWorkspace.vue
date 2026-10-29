@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import PatchReview from './PatchReview.vue';
+import PublicationPanel from './PublicationPanel.vue';
 import type { ReviewState } from './review-types';
 type Task = { id: string; repo: string; issue_number: number; status: string; current_step: string | null; phase: string; attempt: number; error_code: string | null };
 type Detail = Task & ReviewState & {
@@ -59,7 +60,7 @@ async function action(name: 'retry' | 'cancel') {
 <template>
   <section class="content">
     <p class="eyebrow">ISSUE → EVIDENCE → ANALYSIS</p>
-    <div class="title-row"><div><h1>任务工作区<span class="count">{{ tasks.length.toString().padStart(2, '0') }}</span></h1><p class="muted">选择公开 Issue，得到有出处、有数据缺口说明的分析。</p></div><span class="badge">M2 · 补丁人工审核</span></div>
+    <div class="title-row"><div><h1>任务工作区<span class="count">{{ tasks.length.toString().padStart(2, '0') }}</span></h1><p class="muted">选择公开 Issue，得到有出处、有数据缺口说明的分析。</p></div><span class="badge">M3 · 审核与公开</span></div>
     <section class="panel issue-entry"><h2>开始一次分析</h2><p class="muted">接受公开 GitHub 仓库或 Issue 链接。仓库入口最多查询两页开放 Issue。</p>
       <form @submit.prevent="resolveInput" class="issue-input"><label for="github-url" class="sr-only">GitHub 仓库或 Issue 链接</label><input id="github-url" v-model.trim="url" type="url" required maxlength="500" placeholder="https://github.com/owner/repo/issues/123" @input="chosen = ''; issues = []"><button :disabled="busy">解析链接</button></form>
       <label v-if="issues.length" class="issue-picker">选择一个 Issue<select v-model="chosen"><option value="">请选择</option><option v-for="issue in issues" :key="issue.url" :value="issue.url">#{{ issue.number }} {{ issue.title }}</option></select></label>
@@ -75,6 +76,7 @@ async function action(name: 'retry' | 'cancel') {
         <section v-if="detail.snapshot" class="panel"><h2>01 / 来源与边界</h2><a :href="detail.snapshot.issue.url" target="_blank" rel="noopener noreferrer">{{ detail.snapshot.issue.title }} ↗</a><p class="commit-sha">Commit {{ detail.snapshot.commit }}</p><details><summary>实际提供给模型的文件（{{ detail.snapshot.files.length }}）</summary><ul><li v-for="file in detail.snapshot.files" :key="file.path"><a :href="file.url" target="_blank" rel="noopener noreferrer">{{ file.path }}</a></li></ul></details><ul class="gaps"><li v-for="gap in detail.snapshot.gaps" :key="gap">{{ gap }}</li></ul></section>
         <section v-if="detail.analysis" class="panel"><h2>02 / 模型分析 · 待人工审查</h2><span class="badge">{{ { RECOMMENDED: '建议继续', NEEDS_REVIEW: '需要确认', NOT_RECOMMENDED: '暂不建议' }[detail.analysis.recommendation] }}</span><p class="analysis-text">{{ detail.analysis.summary }}</p><p class="analysis-text muted">{{ detail.analysis.rationale }}</p><h3>可核查引文</h3><p v-if="!detail.analysis.evidence.length" class="muted">模型未提供可核查引文，结论依据不足。</p><blockquote v-for="(e, i) in detail.analysis.evidence" :key="i"><a :href="e.url" target="_blank" rel="noopener noreferrer">{{ e.path }} ↗</a><pre>{{ e.quote }}</pre></blockquote><h3>疑点与不确定性</h3><ul><li v-for="(item, i) in detail.analysis.uncertainties" :key="i">{{ item }}</li></ul><h3>建议修改计划</h3><ol><li v-for="(item, i) in detail.analysis.plan" :key="i">{{ item }}</li></ol><p class="config-tip">分析和计划建议仍需你审核；下方保存具体范围并确认后才能生成待验证补丁。</p></section>
         <PatchReview v-if="detail.analysis && detail.snapshot && detail.base_sha" :task-id="detail.id" :status="detail.status" :phase="detail.phase" :base-sha="detail.base_sha" :files="detail.snapshot.files" :suggested-steps="detail.analysis.plan" :review="detail" :api="api" @refresh="refresh" />
+        <PublicationPanel v-if="detail.analysis && !['QUEUED', 'RUNNING'].includes(detail.status)" :task-id="detail.id" :api="api" />
         <section class="panel"><h2>06 / 实际步骤与调用用量</h2><p v-if="!detail.steps.length" class="muted">任务尚未完成步骤。</p><ol class="steps"><li v-for="(step, i) in detail.steps" :key="i"><strong>{{ step.step }} · {{ step.status }} · attempt {{ step.attempt }}</strong><p>{{ step.summary }}</p></li></ol><div v-for="(usage, i) in detail.usage" :key="i" class="usage-line">调用 {{ i + 1 }} · {{ usage.state }} · {{ usage.actual_tokens === null ? `用量未知，保留 ${usage.reserved_tokens} Token 预留` : `实际 ${usage.actual_tokens} Token` }}</div><p class="muted">预留按请求 UTF-8 字节保守估计，不是供应商实际用量。模型输出仍可能有误，未执行项目。</p></section>
       </template>
     </section></div>

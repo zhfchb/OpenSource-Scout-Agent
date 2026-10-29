@@ -10,7 +10,7 @@ import { GithubClient } from '../dist/server/github.js';
 import { ModelClient } from '../dist/server/model.js';
 const directory = mkdtempSync(join(tmpdir(), 'scout-m1-browser-'));
 const salt = 'c'.repeat(32);
-const port = process.env.SCOUT_M2_FIXTURE === '1' ? '3109' : '3108';
+const port = process.env.SCOUT_M3_FIXTURE === '1' ? '3110' : process.env.SCOUT_M2_FIXTURE === '1' ? '3109' : '3108';
 const config = loadConfig({ ADMIN_PASSWORD_HASH: `scrypt$${salt}$${scryptSync('browser-fixture-only', salt, 64).toString('hex')}`, APP_ORIGIN: `http://127.0.0.1:${port}`, PORT: port, DB_PATH: join(directory, 'fixture.sqlite') });
 const db = openDatabase(config.dbPath);
 db.prepare('UPDATE settings SET value = ?').run(JSON.stringify({ ...defaults, model: 'fixture-model' }));
@@ -31,3 +31,5 @@ const app = await buildApp(config, db, true, { github: new FixtureGithub(), mode
 app.addHook('onClose', async () => { db.close(); rmSync(directory, { recursive: true, force: true }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.once(sig, () => { void app.close(); });
 await app.listen({ host: config.host, port: config.port });
+// Lets local automation close the temporary DB cleanly without a force kill.
+process.stdin.on('data', data => { if (data.toString().trim() === 'stop') void app.close().finally(() => process.stdin.destroy()); });

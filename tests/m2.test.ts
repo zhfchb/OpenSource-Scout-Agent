@@ -192,7 +192,7 @@ test('consistent backup restores versioned plans, artifacts and SHA-256-checked 
     tasks.review.recordPr(id, 'https://github.com/owner/repo/pull/123', 'OPEN');
     const result = spawnSync(process.execPath, ['dist/server/backup.js', join(dir, 'backups')], { env: { ...process.env, DB_PATH: path }, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
-    const restoredDb = openDatabase(join(dir, 'backups', readdirSync(join(dir, 'backups'))[0]), false);
+    const restoredDb = openDatabase(join(dir, 'backups', readdirSync(join(dir, 'backups')).find(name => name.endsWith('.sqlite'))!), false);
     const restored = new TaskService(restoredDb);
     try {
       assert.equal(restoredDb.pragma('integrity_check', { simple: true }), 'ok');

@@ -10,6 +10,9 @@ import { csrfToken, digest, newToken, verifyPassword } from './auth.js';
 import { TaskService, type TaskDependencies } from './tasks.js';
 import { DomainError } from './network.js';
 import type { PlanInput } from './patch.js';
+import { PublicationService, type PublicDraft } from './publication.js';
+import { StorageGuard } from './storage.js';
+import { RuntimeMetrics } from './metrics.js';
 
 export const logOptions = {
   level: 'info',
@@ -18,9 +21,12 @@ export const logOptions = {
   serializers: { req: (r: { method: string }) => ({ method: r.method }), res: (r: { statusCode: number }) => ({ statusCode: r.statusCode }) },
 };
 export async function buildApp(config: Config, db: Database.Database, logger = true, dependencies: TaskDependencies = {}) {
-  const tasks = new TaskService(db, dependencies);
+  const limits = dependencies.limits || config.storage;
+  const metrics = dependencies.metrics || new RuntimeMetrics(); metrics.start();
+  const tasks = new TaskService(db, { ...dependencies, limits, metrics });
+  const publications = new PublicationService(db, process.env, limits), storage = new StorageGuard(db, limits);
   const app = Fastify({ logger: logger ? logOptions : false, bodyLimit: 16384, trustProxy: false, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
-  app.addHook('preClose', async () => { await tasks.close(); });
+  app.addHook('preClose', async () => { await tasks.close(); metrics.close(); });
   await app.register(cookie);
   await app.register(rateLimit, { global: false, max: 5, timeWindow: '1 minute', cache: 1000 });
   app.addHook('onRequest', async (req, reply) => {
@@ -39,9 +45,11 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   const cookieOptions = { httpOnly: true, secure: config.secureCookie, sameSite: 'strict' as const, path: '/' };
   const sessionFor = (raw: string | undefined) => raw && /^[a-f0-9]{64}$/.test(raw) ? db.prepare('SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ?').get(digest(raw), Date.now()) : undefined;
   app.get('/api/health', async (_req, reply) => {
-    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M2' }; }
+    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M3' }; }
     catch { return reply.code(503).send({ status: 'unhealthy', database: 'unavailable' }); }
   });
+  app.get<{ Querystring: { page?: string } }>('/api/public/reports', { schema: { querystring: { type: 'object', additionalProperties: false, properties: { page: { type: 'string', pattern: '^[1-9][0-9]{0,2}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.list(Number(req.query.page || 1)));
+  app.get<{ Params: { id: string } }>('/api/public/reports/:id', { schema: { params: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[a-f0-9-]{36}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.read(req.params.id));
   app.post<{ Body: { password: string } }>('/api/auth/login', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     schema: { body: { type: 'object', additionalProperties: false, required: ['password'], properties: { password: { type: 'string', minLength: 1, maxLength: 256 } } } },
@@ -63,13 +71,13 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
       if (!sessionFor(raw)) return reply.code(401).send({ error: 'AUTHENTICATION_REQUIRED' });
       if (!['GET', 'HEAD'].includes(req.method) && req.headers['x-csrf-token'] !== csrfToken(raw!)) return reply.code(403).send({ error: 'CSRF_REJECTED' });
     });
-    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M2' }));
+    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M3' }));
     admin.post('/logout', async (req, reply) => {
       db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(digest(req.cookies.scout_session!));
       reply.clearCookie('scout_session', cookieOptions);
       return { ok: true };
     });
-    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M2' }));
+    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M3' }));
     const urlBody = { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string', minLength: 1, maxLength: 500 } } };
     const taskParams = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[a-f0-9-]{36}$' } } };
     admin.post<{ Body: { url: string } }>('/issues', { schema: { body: urlBody }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => tasks.issues(req.body.url));
@@ -79,6 +87,13 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
     admin.post<{ Params: { id: string }; Body: { expectedAttempt: number } }>('/tasks/:id/retry', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['expectedAttempt'], properties: { expectedAttempt: { type: 'integer', minimum: 0 } } } } }, async req => tasks.retry(req.params.id, req.body.expectedAttempt));
     const sha = { type: 'string', pattern: '^[a-f0-9]{40}$' }, hash = { type: 'string', pattern: '^[a-f0-9]{64}$' };
     const uuid = { type: 'string', pattern: '^[a-f0-9-]{36}$' };
+    admin.get('/operations', async () => ({ storage: storage.usage(), runtime: metrics.snapshot() }));
+    admin.post('/operations/cleanup', { schema: { body: { type: 'object', additionalProperties: false } } }, async () => storage.cleanup());
+    admin.get<{ Params: { id: string } }>('/tasks/:id/publication', { schema: { params: taskParams } }, async req => publications.defaults(req.params.id));
+    const publicDraftSchema = { type: 'object', additionalProperties: false, required: ['title', 'summary', 'rationale', 'uncertainties'], properties: { title: { type: 'string', minLength: 1, maxLength: 160 }, summary: { type: 'string', minLength: 1, maxLength: 4000 }, rationale: { type: 'string', minLength: 1, maxLength: 4000 }, uncertainties: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 500 } } } };
+    admin.post<{ Params: { id: string }; Body: PublicDraft }>('/tasks/:id/publication/preview', { bodyLimit: 65536, schema: { params: taskParams, body: publicDraftSchema } }, async req => publications.preview(req.params.id, req.body));
+    admin.post<{ Params: { id: string }; Body: { previewId: string; hash: string; confirmed: boolean } }>('/tasks/:id/publication/publish', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['previewId', 'hash', 'confirmed'], properties: { previewId: uuid, hash, confirmed: { const: true } } } } }, async req => publications.publish(req.params.id, req.body.previewId, req.body.hash, req.body.confirmed));
+    admin.post<{ Params: { id: string } }>('/publications/:id/revoke', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false } } }, async req => publications.revoke(req.params.id));
     const binding = { type: 'object', additionalProperties: false, required: ['planId', 'hash', 'baseSha'], properties: { planId: uuid, hash, baseSha: sha } };
     admin.post<{ Params: { id: string }; Body: PlanInput & { expectedVersion: number; baseSha: string } }>('/tasks/:id/plans', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['steps', 'allowedPaths', 'allowSensitive', 'allowDependencies', 'expectedVersion', 'baseSha'], properties: {
       steps: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 2000 } }, allowedPaths: { type: 'array', minItems: 1, maxItems: 50, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 240 } }, allowSensitive: { type: 'boolean' }, allowDependencies: { type: 'boolean' }, expectedVersion: { type: 'integer', minimum: 0 }, baseSha: sha,

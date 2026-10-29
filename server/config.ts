@@ -1,8 +1,9 @@
 import { resolve } from 'node:path';
+import { loadStorageLimits, type StorageLimits } from './storage.js';
 
 export interface Config {
   host: string; port: number; origin: string; secureCookie: boolean;
-  passwordHash: string; dbPath: string; sessionHours: number;
+  passwordHash: string; dbPath: string; sessionHours: number; storage: StorageLimits;
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const origin = new URL(env.APP_ORIGIN || 'http://127.0.0.1:3000');
@@ -13,7 +14,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const sessionHours = Number(env.SESSION_HOURS || 12);
   if (!Number.isInteger(port) || port < 1 || port > 65535 || !Number.isInteger(sessionHours) || sessionHours < 1 || sessionHours > 24) throw new Error('Invalid port or session lifetime');
   if (env.NODE_ENV === 'production' && origin.protocol !== 'https:') throw new Error('Production requires HTTPS APP_ORIGIN');
-  return { host: env.HOST || '127.0.0.1', port, origin: origin.origin, secureCookie: origin.protocol === 'https:', passwordHash, dbPath: resolve(env.DB_PATH || 'data/scout.sqlite'), sessionHours };
+  return { host: env.HOST || '127.0.0.1', port, origin: origin.origin, secureCookie: origin.protocol === 'https:', passwordHash, dbPath: resolve(env.DB_PATH || 'data/scout.sqlite'), sessionHours, storage: loadStorageLimits(env) };
 }
 
 export const defaults = {

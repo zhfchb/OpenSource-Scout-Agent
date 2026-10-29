@@ -10,7 +10,7 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 1440, "height": 1100}, reduced_motion='reduce')
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.goto('http://127.0.0.1:3108')
+    page.goto('http://127.0.0.1:3108/#/login')
     page.get_by_label('管理员密码').fill('browser-fixture-only')
     page.get_by_role('button', name='进入工作台').click()
     page.get_by_label('GitHub 仓库或 Issue 链接').fill('https://github.com/fixture/repo/issues/1')

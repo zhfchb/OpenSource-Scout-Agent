@@ -12,7 +12,10 @@
     "test": "tsx --test tests/*.test.ts",
     "start": "node --env-file-if-exists=.env dist/server/index.js",
     "password:hash": "node scripts/hash-password.mjs",
-    "backup": "node --env-file-if-exists=.env dist/server/backup.js"
+    "backup": "node --env-file-if-exists=.env dist/server/backup.js",
+    "backup:verify": "node dist/server/verify-backup.js",
+    "restore": "node dist/server/restore.js",
+    "capacity:probe": "node scripts/capacity-probe.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",

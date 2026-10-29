@@ -7,16 +7,19 @@ import { DomainError } from './network.js';
 import { ReviewService } from './review.js';
 import { checkPatch, type PlanContent } from './patch.js';
 import { digest } from './auth.js';
+import { StorageGuard, type StorageLimits } from './storage.js';
+import type { RuntimeMetrics } from './metrics.js';
 
 interface Task { id: string; repo: string; issue_number: number; status: string; phase: string; data_source: string; attempt: number; config_snapshot: string; snapshot: string | null; analysis: string | null; request_key: string | null }
-export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE' };
+export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE'; limits?: StorageLimits; metrics?: RuntimeMetrics };
 export class TaskService {
   readonly review: ReviewService;
+  private guard: StorageGuard;
   private github: GithubClient; private model: ModelClient;
   private running?: { id: string; controller: AbortController };
   private pumping?: Promise<void>;
   private closed = false;
-  constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); this.review = new ReviewService(db); }
+  constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); this.review = new ReviewService(db, deps.limits); this.guard = new StorageGuard(db, deps.limits); }
   settings(): Settings { return { ...defaults, ...JSON.parse((this.db.prepare('SELECT value FROM settings WHERE id = 1').get() as { value: string }).value) }; }
   ready() { return this.model.available(this.settings()); }
   async issues(url: string) { return this.github.listIssues(url, this.settings(), new AbortController().signal); }
@@ -42,6 +45,7 @@ export class TaskService {
     if (existing) { if (existing.repo !== target.repo || existing.issue_number !== target.issue) throw new DomainError('IDEMPOTENCY_KEY_CONFLICT', 409); return { id: existing.id, duplicate: true }; }
     const active = this.db.prepare("SELECT id FROM tasks WHERE repo = ? AND issue_number = ? AND status IN ('QUEUED','RUNNING')").get(target.repo, target.issue) as { id: string } | undefined;
     if (active) return { id: active.id, duplicate: true };
+    this.guard.task();
     const settings = this.settings();
     try { assertSettings(settings); } catch { throw new DomainError('INVALID_SETTINGS'); }
     if (!this.model.available(settings)) throw new DomainError('MODEL_NOT_CONFIGURED');
@@ -103,6 +107,7 @@ export class TaskService {
       const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source', task.id);
       if (!claim.changes) continue;
       const controller = new AbortController(); this.running = { id: task.id, controller };
+      this.deps.metrics?.mark(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source');
       try { await this.run(task, controller.signal); }
       catch (error) {
         if (this.live(task)) {
@@ -111,7 +116,7 @@ export class TaskService {
           const step = (this.db.prepare('SELECT current_step FROM tasks WHERE id = ?').get(task.id) as { current_step: string }).current_step;
           this.db.prepare("INSERT INTO task_steps(task_id, attempt, step, status, summary) VALUES (?, ?, ?, 'FAILED', ?)").run(task.id, task.attempt, step, code);
         }
-      } finally { this.running = undefined; }
+      } finally { this.running = undefined; this.deps.metrics?.mark('idle'); }
     }
   }
   private async run(task: Task, signal: AbortSignal) {
@@ -126,6 +131,7 @@ export class TaskService {
       context = prepareContext(snapshot, settings).context;
       const value = JSON.stringify(context);
       if (Buffer.byteLength(value) > settings.maxArtifactBytes) throw new DomainError('SNAPSHOT_LIMIT_EXCEEDED');
+      this.guard.writable(Buffer.byteLength(value));
       this.db.transaction(() => {
         this.db.prepare('UPDATE tasks SET snapshot = ?, base_sha = ? WHERE id = ? AND attempt = ?').run(value, context.commit, task.id, task.attempt);
         this.step(task, 'source', `固定 Commit，保存 ${context.files.length} 个文件；包含 ${context.gaps.length} 条数据缺口。`);
@@ -133,6 +139,7 @@ export class TaskService {
     }
     if (!this.live(task)) return;
     this.db.prepare("UPDATE tasks SET current_step = 'analysis' WHERE id = ? AND attempt = ?").run(task.id, task.attempt);
+    this.deps.metrics?.mark('analysis');
     const reserved = prepareContext(context, settings).reservedTokens;
     const usageId = this.reserve(task, reserved);
     let analysis: Analysis;
@@ -144,6 +151,7 @@ export class TaskService {
     if (!this.live(task) || signal.aborted) return;
     const result = JSON.stringify(analysis);
     if (Buffer.byteLength(result) > settings.maxArtifactBytes) throw new DomainError('ANALYSIS_LIMIT_EXCEEDED');
+    this.guard.writable(Buffer.byteLength(result));
     this.db.transaction(() => {
       this.db.prepare("UPDATE tasks SET analysis = ?, status = 'WAITING_CONFIRMATION', current_step = 'analysis', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ? AND status = 'RUNNING'").run(result, task.id, task.attempt);
       this.step(task, 'analysis', '结构化分析已保存；模型引文已与实际输入核对，仍需人工审查，未执行项目测试。');
@@ -163,6 +171,7 @@ export class TaskService {
     const plan = this.review.checkBinding(task.id, row);
     const snapshot = JSON.parse(task.snapshot!) as Snapshot, analysis = JSON.parse(task.analysis!) as Analysis, settings = JSON.parse(task.config_snapshot) as Settings;
     const { reservedTokens } = preparePatchRequest(snapshot, analysis, plan, settings);
+    this.guard.artifact(settings.maxArtifactBytes);
     const usageId = this.reserve(task, reservedTokens);
     let output: unknown;
     try {
@@ -177,6 +186,7 @@ export class TaskService {
       plan: { id: row.id, hash: row.hash, content: plan }, analysis, patch: checked.patch, prDraft, checks: checked.checks, createdAt: new Date().toISOString() };
     const content = JSON.stringify(bundle), bytes = Buffer.byteLength(content);
     if (bytes > settings.maxArtifactBytes) throw new DomainError('REVIEW_BUNDLE_SIZE_EXCEEDED', 502);
+    this.guard.artifact(bytes);
     this.db.transaction(() => {
       this.review.checkBinding(task.id, row);
       this.db.prepare('INSERT INTO artifacts(id, task_id, plan_id, content, hash, bytes) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), task.id, row.id, content, digest(content), bytes);

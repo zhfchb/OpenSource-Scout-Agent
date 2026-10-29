@@ -18,7 +18,7 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 1440, "height": 1000}, reduced_motion='reduce')
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.goto('http://127.0.0.1:3107')
+    page.goto('http://127.0.0.1:3107/#/login')
     settled(page)
     page.get_by_role('heading', name='回到工作台').wait_for()
     page.screenshot(path=str(out / 'login.png'), full_page=True)

@@ -13,10 +13,16 @@ export function prepareContext(snapshot: Snapshot, settings: Settings) {
   const context: Snapshot = structuredClone(snapshot);
   // Byte count is a conservative preflight bound, not provider-reported token usage.
   const count = () => Buffer.byteLength(JSON.stringify({ system, context }), 'utf8') + 128;
-  const ceiling = Math.min(settings.maxContextTokens, settings.maxTokensPerTask - 2048);
-  while (count() > ceiling && context.files.length) context.files.pop();
-  if (context.files.length !== snapshot.files.length) context.gaps.push('模型上下文预算不足，已移除部分源码；证据仅可引用实际发送的文件。');
+  const ceiling = Math.min(settings.maxContextTokens, settings.maxTokensPerTask) - 2048;
+  const candidates = context.files; context.files = [];
   if (count() > ceiling) { context.issue.body = context.issue.body.slice(0, 1000); context.gaps.push('上下文预算限制，Issue 正文进一步截断。'); }
+  if (count() > ceiling) throw new DomainError('CONTEXT_BUDGET_EXCEEDED');
+  for (const file of candidates) {
+    context.files.push(file);
+    if (count() > ceiling) context.files.pop();
+  }
+  if (context.files.length !== snapshot.files.length) context.gaps.push('模型上下文预算不足，已移除部分源码；证据仅可引用实际发送的文件。');
+  while (count() > ceiling && context.files.length) context.files.pop();
   if (count() > ceiling) throw new DomainError('CONTEXT_BUDGET_EXCEEDED');
   return { context, reservedTokens: count() + 2048, inputBound: count() };
 }

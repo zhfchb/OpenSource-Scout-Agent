@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { defaults, settingsSchema } from './config.js';
+import { defaults, assertSettings } from './config.js';
 import { GithubClient, parseGithubUrl, type Settings, type Snapshot } from './github.js';
 import { ModelClient, prepareContext, type Analysis } from './model.js';
 import { DomainError } from './network.js';
@@ -39,6 +39,7 @@ export class TaskService {
     const active = this.db.prepare("SELECT id FROM tasks WHERE repo = ? AND issue_number = ? AND status IN ('QUEUED','RUNNING')").get(target.repo, target.issue) as { id: string } | undefined;
     if (active) return { id: active.id, duplicate: true };
     const settings = this.settings();
+    try { assertSettings(settings); } catch { throw new DomainError('INVALID_SETTINGS'); }
     if (!this.model.available(settings)) throw new DomainError('MODEL_NOT_CONFIGURED');
     if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
     const id = randomUUID();
@@ -55,6 +56,9 @@ export class TaskService {
   retry(id: string, expectedAttempt: number) {
     const task = this.get(id);
     if (task.attempt !== expectedAttempt || !['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(task.status)) throw new DomainError('RETRY_CONFLICT', 409);
+    if (this.db.prepare("SELECT 1 FROM tasks WHERE repo = ? AND issue_number = ? AND id != ? AND status IN ('QUEUED','RUNNING')").get(task.repo, task.issue_number, id)) throw new DomainError('TASK_ALREADY_ACTIVE', 409);
+    if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
+    try { assertSettings(JSON.parse(task.config_snapshot)); } catch { throw new DomainError('INVALID_SETTINGS'); }
     if (!this.model.available(JSON.parse(task.config_snapshot))) throw new DomainError('MODEL_NOT_CONFIGURED');
     this.db.prepare("UPDATE tasks SET status = 'QUEUED', attempt = attempt + 1, error_code = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ?").run(id, expectedAttempt);
     this.kick(); return { ok: true };
@@ -73,7 +77,7 @@ export class TaskService {
     while (!this.closed) {
       const task = this.db.prepare("SELECT * FROM tasks WHERE status = 'QUEUED' ORDER BY created_at, rowid LIMIT 1").get() as Task | undefined;
       if (!task) break;
-      const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.id);
+      const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.snapshot ? 'analysis' : 'source', task.id);
       if (!claim.changes) continue;
       const controller = new AbortController(); this.running = { id: task.id, controller };
       try { await this.run(task, controller.signal); }
@@ -81,7 +85,8 @@ export class TaskService {
         if (this.live(task)) {
           const code = error instanceof DomainError ? error.code : controller.signal.aborted ? 'REQUEST_ABORTED' : 'STEP_REQUEST_FAILED';
           this.db.prepare("UPDATE tasks SET status = 'FAILED', error_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ? AND status = 'RUNNING'").run(code, task.id, task.attempt);
-          this.db.prepare("INSERT INTO task_steps(task_id, attempt, step, status, summary) VALUES (?, ?, 'analysis', 'FAILED', ?)").run(task.id, task.attempt, code);
+          const step = (this.db.prepare('SELECT current_step FROM tasks WHERE id = ?').get(task.id) as { current_step: string }).current_step;
+          this.db.prepare("INSERT INTO task_steps(task_id, attempt, step, status, summary) VALUES (?, ?, ?, 'FAILED', ?)").run(task.id, task.attempt, step, code);
         }
       } finally { this.running = undefined; }
     }
@@ -103,6 +108,7 @@ export class TaskService {
       })();
     }
     if (!this.live(task)) return;
+    this.db.prepare("UPDATE tasks SET current_step = 'analysis' WHERE id = ? AND attempt = ?").run(task.id, task.attempt);
     const reserved = prepareContext(context, settings).reservedTokens;
     const usageId = this.db.transaction(() => {
       const used = this.db.prepare('SELECT count(*) AS calls, coalesce(sum(coalesce(actual_tokens, reserved_tokens)), 0) AS tokens FROM usage WHERE task_id = ?').get(task.id) as { calls: number; tokens: number };
@@ -133,4 +139,3 @@ export class TaskService {
   }
 }
 
-export { settingsSchema };

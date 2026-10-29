@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { defaults } from '../server/config.js';
+import { randomUUID, scryptSync, createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { defaults, loadConfig } from '../server/config.js';
+import { buildApp } from '../server/app.js';
 import { openDatabase } from '../server/db.js';
 import { GithubClient, parseGithubUrl, safeSourcePath, type Snapshot } from '../server/github.js';
 import { ModelClient, prepareContext, validateAnalysis, type Analysis } from '../server/model.js';
@@ -46,11 +50,13 @@ test('GitHub only lists two pages, filters PRs and rejects private repositories'
 
 test('bounded snapshot pins commit, excludes sensitive files and records missing context', async () => {
   const urls: string[] = [];
+  const text = 'export const value = 1;';
+  const blobSha = createHash('sha1').update(`blob ${Buffer.byteLength(text)}\0${text}`).digest('hex');
   const client = new GithubClient(async url => {
     urls.push(url);
     if (url.includes('/issues/')) return { number: 1, title: 'src/main.ts', body: 'a'.repeat(13000) };
     if (url.includes('/commits/')) return { sha: 'a'.repeat(40) };
-    if (url.includes('/git/trees/')) return { truncated: true, tree: ['.env', 'src/main.ts', 'README.md', 'large.ts'].map((path, i) => ({ path, type: 'blob', mode: '100644', sha: 'b'.repeat(40), size: i === 3 ? 1000000 : 20 })) };
+    if (url.includes('/git/trees/')) return { truncated: true, tree: ['.env', 'src/main.ts', 'README.md', 'large.ts'].map((path, i) => ({ path, type: 'blob', mode: '100644', sha: blobSha, size: i === 3 ? 1000000 : Buffer.byteLength(text) })) };
     if (url.includes('/git/blobs/')) return { encoding: 'base64', content: Buffer.from('export const value = 1;').toString('base64') };
     return { private: false, default_branch: 'main' };
   });
@@ -73,9 +79,57 @@ test('context preflight trims files and output evidence must match actual source
   const input = snapshot(); input.files.push({ ...input.files[0], path: 'large.ts', content: 'x'.repeat(30000) });
   const prepared = prepareContext(input, settings);
   assert.equal(prepared.context.files.length, 1); assert.ok(prepared.reservedTokens <= settings.maxTokensPerTask);
+  assert.equal(prepareContext(prepared.context, settings).reservedTokens, prepared.reservedTokens);
   assert.equal(validateAnalysis(analysis(), snapshot()).evidence[0].url, snapshot().files[0].url);
   assert.throws(() => validateAnalysis({ ...analysis(), evidence: [{ path: 'missing.ts', quote: 'invented' }] }, snapshot()));
   assert.throws(() => validateAnalysis({ ...analysis(), command: 'anything' }, snapshot()));
+});
+
+test('restart interrupts queued/running tasks, preserves snapshots and conservatively marks reserved usage', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scout-m1-restart-')); const path = join(dir, 'db.sqlite');
+  let db = openDatabase(path);
+  try {
+    for (const [id, status] of [['a', 'RUNNING'], ['b', 'QUEUED'], ['c', 'WAITING_CONFIRMATION']]) db.prepare('INSERT INTO tasks(id, repo, issue_number, status, config_snapshot, snapshot) VALUES (?, ?, ?, ?, ?, ?)').run(id, 'fixture/repo', id.charCodeAt(0), status, JSON.stringify(settings), JSON.stringify(snapshot()));
+    db.prepare("INSERT INTO usage(task_id, attempt, reserved_tokens, state) VALUES ('a', 0, 1000, 'RESERVED')").run();
+    db.close(); db = openDatabase(path);
+    assert.deepEqual((db.prepare('SELECT status FROM tasks ORDER BY id').all() as any[]).map(r => r.status), ['INTERRUPTED', 'INTERRUPTED', 'WAITING_CONFIRMATION']);
+    assert.equal((db.prepare('SELECT state FROM usage').get() as any).state, 'UNKNOWN');
+    assert.equal(JSON.parse((db.prepare("SELECT snapshot FROM tasks WHERE id = 'a'").get() as any).snapshot).commit, snapshot().commit);
+  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('model rejects malformed JSON, truncated output, ungrounded evidence and credential echoes', async () => {
+  for (const response of [
+    { choices: [{ finish_reason: 'length', message: { content: '{}' } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: 'not JSON' } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...analysis(), summary: 'unit-test-secret' }) } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...analysis(), evidence: [{ path: 'missing.ts', quote: 'fake' }] }) } }] },
+  ]) {
+    let recorded = false;
+    const model = new ModelClient(async () => ({ ...response, usage: { total_tokens: 10 } }), { MODEL_API_KEY: 'unit-test-secret' });
+    await assert.rejects(model.analyze(snapshot(), settings, signal(), n => { recorded = n === 10; }));
+    assert.equal(recorded, true);
+  }
+});
+
+test('admin task API validates input and protects details and mutations', async () => {
+  const db = openDatabase(':memory:'); db.prepare('UPDATE settings SET value = ?').run(JSON.stringify(settings));
+  const salt = 'd'.repeat(32), password = 'api-fixture-password';
+  const config = loadConfig({ ADMIN_PASSWORD_HASH: `scrypt$${salt}$${scryptSync(password, salt, 64).toString('hex')}` });
+  const app = await buildApp(config, db, false, { github: new FixtureGithub(), model: fixtureModel(), source: 'FIXTURE' });
+  try {
+    assert.equal((await app.inject({ method: 'POST', url: '/api/admin/tasks', headers: { origin: config.origin }, payload: { url: 'https://github.com/owner/repo/issues/1', requestKey: randomUUID() } })).statusCode, 401);
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: config.origin }, payload: { password } });
+    const headers = { origin: config.origin, cookie: `scout_session=${login.cookies[0].value}`, 'x-csrf-token': login.json().csrfToken };
+    assert.equal((await app.inject({ method: 'POST', url: '/api/admin/tasks', headers, payload: { url: 'https://evil.test/', requestKey: randomUUID() } })).statusCode, 400);
+    const created = await app.inject({ method: 'POST', url: '/api/admin/tasks', headers, payload: { url: 'https://github.com/owner/repo/issues/1', requestKey: randomUUID() } });
+    assert.equal(created.statusCode, 202); const id = created.json().id;
+    assert.equal((await app.inject(`/api/admin/tasks/${id}`)).statusCode, 401);
+    const detail = await app.inject({ url: `/api/admin/tasks/${id}`, headers });
+    assert.equal(detail.statusCode, 200); assert.equal(detail.json().source, 'FIXTURE');
+    assert.equal(detail.body.includes('config_snapshot'), false);
+    assert.equal((await app.inject({ method: 'POST', url: `/api/admin/tasks/${id}/retry`, headers: { cookie: headers.cookie, origin: config.origin }, payload: { expectedAttempt: 0 } })).statusCode, 403);
+  } finally { await app.close(); db.close(); }
 });
 
 test('duplicate submission is idempotent; analysis and known usage persist without exposing source content', async () => {

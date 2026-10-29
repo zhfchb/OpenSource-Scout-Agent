@@ -1,5 +1,6 @@
 import { DomainError, boundedJson, type Transport } from './network.js';
 import type { defaults } from './config.js';
+import { createHash } from 'node:crypto';
 export type Settings = typeof defaults;
 export type Target = { repo: string; issue?: number };
 export interface Snapshot {
@@ -12,11 +13,11 @@ export function parseGithubUrl(value: string): Target {
   try { url = new URL(value); } catch { throw new DomainError('INVALID_GITHUB_URL'); }
   if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password || url.port || url.search || url.hash || /%|\\/.test(value)) throw new DomainError('INVALID_GITHUB_URL');
   const match = /^\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9_.-]{1,100})(?:\/issues\/([1-9]\d{0,8}))?\/?$/.exec(url.pathname);
-  if (!match || ['.', '..'].includes(match[2])) throw new DomainError('INVALID_GITHUB_URL');
+  if (!match || ['', '.', '..'].includes(match[2].replace(/\.git$/, ''))) throw new DomainError('INVALID_GITHUB_URL');
   return { repo: `${match[1]}/${match[2].replace(/\.git$/, '')}`.toLowerCase(), ...(match[3] ? { issue: Number(match[3]) } : {}) };
 }
 export function safeSourcePath(path: string) {
-  return path.length <= 240 && !path.startsWith('/') && !path.includes('\\') && !path.split('/').some(p => p === '..' || p.startsWith('.')) && !/(?:^|\/)(?:node_modules|vendor|dist|build|secrets?|credentials?)(?:\/|\.)|(?:lock|\.min)\.|\.(?:pem|key|p12|crt)$/i.test(path) && /\.(?:ts|tsx|js|jsx|mjs|cjs|vue|py|java|go|rs|rb|c|h|cpp|cs|md|json|yml|yaml|toml|css|html|sql|txt)$/i.test(path);
+  return path.length <= 240 && !/[\x00-\x1f\x7f]/.test(path) && !path.startsWith('/') && !path.includes('\\') && !path.split('/').some(p => p === '..' || p.startsWith('.')) && !/(?:^|\/)(?:node_modules|vendor|dist|build|secrets?|credentials?)(?:\/|\.)|(?:lock|\.min)\.|\.(?:pem|key|p12|crt)$/i.test(path) && /\.(?:ts|tsx|js|jsx|mjs|cjs|vue|py|java|go|rs|rb|c|h|cpp|cs|md|json|yml|yaml|toml|css|html|sql|txt)$/i.test(path);
 }
 export class GithubClient {
   constructor(private transport: Transport = boundedJson, private env: NodeJS.ProcessEnv = process.env) {}
@@ -71,6 +72,7 @@ export class GithubClient {
       const blob = await this.get(target.repo, `/git/blobs/${file.sha}`, settings, signal, Math.ceil(settings.maxFileBytes * 1.5) + 4096);
       if (blob.encoding !== 'base64' || typeof blob.content !== 'string') throw new DomainError('INVALID_BLOB', 502);
       const buffer = Buffer.from(blob.content, 'base64');
+      if (buffer.length !== file.size || createHash('sha1').update(`blob ${buffer.length}\0`).update(buffer).digest('hex') !== file.sha) throw new DomainError('BLOB_HASH_MISMATCH', 502);
       if (buffer.length > settings.maxFileBytes || bytes + buffer.length > settings.maxSourceBytes) throw new DomainError('SOURCE_LIMIT_EXCEEDED');
       let content: string;
       try { content = new TextDecoder('utf-8', { fatal: true }).decode(buffer); } catch { gaps.push(`非 UTF-8 文件已跳过：${file.path}`); continue; }

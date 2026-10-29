@@ -31,7 +31,7 @@ test('migration persists settings, detects tampering and interrupts only running
     db.close(); db = openDatabase(path);
     assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 't1'").get() as any).status, 'INTERRUPTED');
     assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 't2'").get() as any).status, 'WAITING_CONFIRMATION');
-    assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as any).n, 3);
+    assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as any).n, 4);
     db.prepare("UPDATE schema_migrations SET checksum = 'tampered'").run();
     db.close();
     assert.throws(() => openDatabase(path), /checksum/);
@@ -107,7 +107,7 @@ test('compiled backup preserves source task status and restores an integral data
     const result = spawnSync(process.execPath, ['dist/server/backup.js', join(dir, 'backups')], { env: { ...process.env, DB_PATH: path }, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     assert.equal((db.prepare('SELECT status FROM tasks').get() as any).status, 'RUNNING');
-    const restored = openDatabase(join(dir, 'backups', readdirSync(join(dir, 'backups'))[0]), false);
+    const restored = openDatabase(join(dir, 'backups', readdirSync(join(dir, 'backups')).find(name => name.endsWith('.sqlite'))!), false);
     try {
       assert.equal(restored.pragma('integrity_check', { simple: true }), 'ok');
       assert.equal((restored.prepare('SELECT status FROM tasks').get() as any).status, 'RUNNING');

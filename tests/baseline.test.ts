@@ -31,7 +31,7 @@ test('migration persists settings, detects tampering and interrupts only running
     db.close(); db = openDatabase(path);
     assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 't1'").get() as any).status, 'INTERRUPTED');
     assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 't2'").get() as any).status, 'WAITING_CONFIRMATION');
-    assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as any).n, 2);
+    assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as any).n, 3);
     db.prepare("UPDATE schema_migrations SET checksum = 'tampered'").run();
     db.close();
     assert.throws(() => openDatabase(path), /checksum/);

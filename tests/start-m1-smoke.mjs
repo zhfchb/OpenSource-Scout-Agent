@@ -10,7 +10,7 @@ import { GithubClient } from '../dist/server/github.js';
 import { ModelClient } from '../dist/server/model.js';
 const directory = mkdtempSync(join(tmpdir(), 'scout-m1-browser-'));
 const salt = 'c'.repeat(32);
-const port = process.env.SCOUT_M3_FIXTURE === '1' ? '3110' : process.env.SCOUT_M2_FIXTURE === '1' ? '3109' : '3108';
+const port = process.env.SCOUT_M4_FIXTURE === '1' ? '3111' : process.env.SCOUT_M3_FIXTURE === '1' ? '3110' : process.env.SCOUT_M2_FIXTURE === '1' ? '3109' : '3108';
 const config = loadConfig({ ADMIN_PASSWORD_HASH: `scrypt$${salt}$${scryptSync('browser-fixture-only', salt, 64).toString('hex')}`, APP_ORIGIN: `http://127.0.0.1:${port}`, PORT: port, DB_PATH: join(directory, 'fixture.sqlite') });
 const db = openDatabase(config.dbPath);
 db.prepare('UPDATE settings SET value = ?').run(JSON.stringify({ ...defaults, model: 'fixture-model' }));
@@ -21,7 +21,7 @@ class FixtureGithub extends GithubClient {
 }
 const model = new ModelClient(async (_url, init) => {
   const isPatch = JSON.parse(init.body).max_tokens === 4096;
-  const result = isPatch ? {
+  const result = JSON.parse(init.body).max_tokens === 64 ? {ok:true} : isPatch ? {
     diff: 'diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-export const value = 1;\n\\ No newline at end of file\n+export const value = 2;\n\\ No newline at end of file\n',
     prTitle: 'FIXTURE：修改边界', prBody: '仅为浏览器夹具。UNVERIFIED；编译和测试 NOT_RUN。',
   } : { summary: 'FIXTURE：检查边界条件 <img src=x onerror=alert(1)>', recommendation: 'NEEDS_REVIEW', rationale: '仅为浏览器验收夹具', uncertainties: ['未执行项目测试'], evidence: [{ path: 'src/main.ts', quote: 'value = 1' }], plan: ['建议增加边界校验'] };

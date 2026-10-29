@@ -1,0 +1,42 @@
+{
+  "docs/产品需求文档.md": {
+    "bytes": 6324,
+    "sha256": "13f683addd69ecdf1e372315a4e8c8b5f5724a43bb1a430dafb8f4e7bda64005"
+  },
+  "docs/技术架构.md": {
+    "bytes": 6683,
+    "sha256": "ca47a29b39f59dc88a66febed1d2c5ea8af6745540ea61c9126fd88ff4c88a41"
+  },
+  "docs/开发路线图.md": {
+    "bytes": 3694,
+    "sha256": "ed91ef327f27c3ccc5339db0d4129ccf528c46cb351264e87d7d7c29f090f7b7"
+  },
+  "docs/开发启动提示词.md": {
+    "bytes": 3176,
+    "sha256": "77dee317a2aa59d4e62cf91d3cb38a64133c63e14bd41979dfdb5ccdedb4713a"
+  },
+  "docs/历史归档/v1.0/产品需求文档.md": {
+    "bytes": 16272,
+    "sha256": "eacab1be364cf66bd501adb4938ac2caa93019a3042ae32c74f4c4db2fa41362"
+  },
+  "docs/历史归档/v1.0/技术架构.md": {
+    "bytes": 25148,
+    "sha256": "05556e16bdeeb1996a2a5cfad5663a02179e87b563ed02c1a34e1f1b0f3eea85"
+  },
+  "docs/历史归档/v1.0/开发路线图.md": {
+    "bytes": 14640,
+    "sha256": "9962e694424c1d81fcdec346bc518763c4dad71c60c490410367c029528716fa"
+  },
+  "docs/历史归档/v1.0/开发启动提示词.md": {
+    "bytes": 4639,
+    "sha256": "26a5bd2bc0232f1961cc79ce82f378586f37852397b957b44cabe5290a4762e0"
+  },
+  "docs/历史归档/v1.0/设计决策记录.md": {
+    "bytes": 9325,
+    "sha256": "9d6a5c7adbcc21b2aed92bbab055c4b66db697216dc5743d7d90156f5ac64d8d"
+  },
+  "docs/设计决策记录.md": {
+    "bytes": 3950,
+    "sha256": "5098409d7283aecb098b7dfc8f1686ebc32c96e3e7665db427836aa0e346705c"
+  }
+}

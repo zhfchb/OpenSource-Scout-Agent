@@ -375,6 +375,46 @@ header {
 .workflow {
   gap:10px}
 }
+
+/* M1: bounded input and evidence desk, retaining the light blue theme. */
+.issue-entry { margin: 18px 0 36px; }
+.issue-input { display: flex; gap: 12px; }
+.issue-input input { min-width: 0; flex: 1; }
+.issue-input button { flex-shrink: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+.issue-picker { margin-top: 18px; }
+select { display: block; width: 100%; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: white; font: inherit; }
+.start-row { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 18px; }
+.selected-url { font-size: 12px; overflow-wrap: anywhere; margin-right: auto; }
+.config-tip { background: #edf6fe; padding: 14px; font-size: 12px; color: #436d8e; line-height: 1.9; margin: 18px 0 0; border-radius: 4px; }
+.text-button { border: 0; padding: 0 4px; background: none; color: #246da5; text-decoration: underline; }
+.analysis-layout { display: grid; grid-template-columns: 260px minmax(0,1fr); gap: 26px; align-items: start; }
+.analysis-layout .panel { margin: 0 0 20px; padding: 24px; }
+.task-card { display: flex; flex-direction: column; width: 100%; text-align: left; gap: 10px; padding: 17px; margin: 0 0 10px; overflow-wrap: anywhere; }
+.task-card strong { font-size: 12px; }
+.task-card span,.task-card small { font-size: 11px; color: #597d99; }
+.task-card.selected { background: #e8f4fe; border-color: #81b8df; }
+.task-column .compact { padding: 25px 14px; min-height: 220px; }
+.compact h2 { font-size: 15px; }
+.detail-placeholder { min-height: 220px; display: flex; flex-direction: column; justify-content: center; }
+.detail-column { min-width: 0; }
+.detail-column h2 { font-size: 15px; overflow-wrap: anywhere; }
+.detail-column h3 { font-size: 13px; margin-top: 24px; }
+.detail-column .badge { white-space: normal; }
+.detail-column .muted,.detail-column li { font-size: 12px; line-height: 1.9; overflow-wrap: anywhere; }
+.detail-column ul,.detail-column ol { padding-left: 22px; }
+.detail-column a { color: #286fa4; font-size: 12px; overflow-wrap: anywhere; }
+.detail-column blockquote { margin: 16px 0; border-left: 3px solid #acd1ec; padding: 12px 16px; background: #f5f9fd; }
+.detail-column pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 Consolas,monospace; }
+.analysis-text { margin-top: 20px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.commit-sha { font: 11px/1.8 Consolas,monospace; overflow-wrap: anywhere; color: #68839a; margin-top: 16px; }
+details summary { font-size: 12px; cursor: pointer; }
+.gaps { color: #687f90; }
+.action-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.steps p { margin: 6px 0 12px; }
+.usage-line { border-top: 1px solid var(--line); padding: 12px 0; font-size: 11px; }
+@media (max-width: 1100px) { .analysis-layout { grid-template-columns: 1fr; } .task-column { display: flex; flex-wrap: wrap; gap: 10px; } .task-column .section-heading { width: 100%; } .task-card { width: calc(50% - 5px); margin: 0; } .task-column .compact { width: 100%; } }
+@media (max-width: 700px) { .issue-input { flex-direction: column; } .task-card { width: 100%; } .start-row { flex-wrap: wrap; } .detail-column .title-row { flex-direction: column; } }
 @media(max-width:700px) {
   .workspace {
   display:block}

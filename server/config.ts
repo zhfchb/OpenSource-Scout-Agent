@@ -38,3 +38,13 @@ export const settingsSchema = {
     maxArtifactBytes: { type: 'integer', minimum: 1024, maximum: 2000000 },
   },
 } as const;
+
+export function assertSettings(value: typeof defaults) {
+  if (!value || typeof value !== 'object' || Object.keys(value).some(key => !(key in settingsSchema.properties))) throw new Error('INVALID_SETTINGS');
+  for (const [key, rule] of Object.entries(settingsSchema.properties)) {
+    const field = value[key as keyof typeof defaults];
+    if (rule.type === 'integer') {
+      if (typeof field !== 'number' || !Number.isInteger(field) || field < rule.minimum || field > rule.maximum) throw new Error('INVALID_SETTINGS');
+    } else if (typeof field !== 'string' || !new RegExp(rule.pattern).test(field) || ('maxLength' in rule && field.length > rule.maxLength)) throw new Error('INVALID_SETTINGS');
+  }
+}

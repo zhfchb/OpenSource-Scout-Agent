@@ -27,7 +27,10 @@ export function openDatabase(path: string, recover = true) {
         if (!applied) { db.exec(sql); db.prepare('INSERT INTO schema_migrations(version, checksum) VALUES (?, ?)').run(file, checksum); }
       }
       db.prepare('INSERT OR IGNORE INTO settings(id, value) VALUES (1, ?)').run(JSON.stringify(defaults));
-      if (recover) db.prepare("UPDATE tasks SET status = 'INTERRUPTED', updated_at = CURRENT_TIMESTAMP WHERE status = 'RUNNING'").run();
+      if (recover) {
+        db.prepare("UPDATE tasks SET status = 'INTERRUPTED', updated_at = CURRENT_TIMESTAMP WHERE status IN ('RUNNING','QUEUED')").run();
+        db.prepare("UPDATE usage SET state = 'UNKNOWN' WHERE state = 'RESERVED'").run();
+      }
       db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
     })();
     return db;

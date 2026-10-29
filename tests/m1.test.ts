@@ -198,6 +198,27 @@ test('missing configuration does not enqueue or spend; model failures keep unkno
   } finally { await failed.tasks.close(); failed.db.close(); }
 });
 
+test('invalid persisted limits reject enqueue before any model invocation', async () => {
+  const { db, tasks } = setup();
+  try {
+    db.prepare('UPDATE settings SET value = ?').run(JSON.stringify({ ...settings, maxCallsPerTask: 0 }));
+    assert.throws(() => tasks.create('https://github.com/owner/repo/issues/1', randomUUID()), /INVALID_SETTINGS/);
+    assert.equal(tasks.list().length, 0);
+    assert.equal((db.prepare('SELECT count(*) AS n FROM usage').get() as any).n, 0);
+  } finally { await tasks.close(); db.close(); }
+});
+
+test('retry rejects a second active task for the same Issue', async () => {
+  const { db, tasks } = setup();
+  try {
+    const first = tasks.create('https://github.com/owner/repo/issues/1', randomUUID()); await tasks.idle();
+    db.prepare("UPDATE tasks SET status = 'FAILED' WHERE id = ?").run(first.id);
+    tasks.create('https://github.com/owner/repo/issues/1', randomUUID());
+    assert.throws(() => tasks.retry(first.id, 0), /TASK_ALREADY_ACTIVE/);
+    await tasks.idle();
+  } finally { await tasks.close(); db.close(); }
+});
+
 test('network rejects arbitrary destinations and caps streamed JSON, timeout and redirects', async () => {
   await assert.rejects(boundedJson('http://127.0.0.1/', {}, 100, 100), /DESTINATION/);
   const original = globalThis.fetch;

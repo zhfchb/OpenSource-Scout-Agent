@@ -4,7 +4,7 @@ import {ModelClient, probeReservation} from './model.js';
 import {savedSettings} from './settings.js';
 import {DomainError} from './network.js';
 import {executionSlot} from './execution-slot.js';
-import {StorageGuard} from './storage.js';
+import {StorageGuard, type StorageLimits} from './storage.js';
 import {errorGuidance} from './error-guidance.js';
 import {assertSettings} from './config.js';
 interface RecordRow {id:string; request_key:string; settings_revision:number; boot_id:string; status:string; attempt:number; started_at:number; finished_at:number|null; error_code:string|null; [key:string]:unknown}
@@ -13,7 +13,7 @@ export class ModelTestsService {
   private running?: {id:string; controller:AbortController; done:Promise<void>};
   private closed = false;
   readonly limits: {dailyCalls:number; dailyTokens:number; intervalMs:number};
-  constructor(private db:Database.Database, private model = new ModelClient(), private source='LIVE', private now=Date.now, env:NodeJS.ProcessEnv=process.env) {
+  constructor(private db:Database.Database, private model = new ModelClient(), private source='LIVE', private now=Date.now, env:NodeJS.ProcessEnv=process.env, private storageLimits?:StorageLimits) {
     const limit = (name:string, fallback:number) => { const n=Number(env[name] || fallback); if (!Number.isSafeInteger(n)||n<1) throw new Error('INVALID_MODEL_TEST_LIMIT'); return n; };
     this.limits={dailyCalls:limit('MODEL_TEST_DAILY_CALLS',5),dailyTokens:limit('MODEL_TEST_DAILY_TOKENS',10000),intervalMs:limit('MODEL_TEST_INTERVAL_MS',60000)};
   }
@@ -51,7 +51,7 @@ export class ModelTestsService {
     if(this.now()<budget.nextAllowedAt) throw new DomainError('MODEL_TEST_COOLDOWN',429);
     if(budget.calls>=budget.dailyCalls||budget.tokens+reserved>budget.dailyTokens) throw new DomainError('MODEL_TEST_BUDGET_EXCEEDED',409);
     if((this.db.prepare('SELECT count(*) AS n FROM model_tests').get() as {n:number}).n>=1000) throw new DomainError('MODEL_TEST_STORAGE_LIMIT',409);
-    new StorageGuard(this.db).writable(4096);
+    new StorageGuard(this.db,this.storageLimits).writable(4096);
     if(this.db.prepare("SELECT 1 FROM tasks WHERE status IN ('QUEUED','RUNNING')").get()) throw new DomainError('EXECUTION_BUSY',409);
     const release=executionSlot(this.db).acquire(); if(!release) throw new DomainError('EXECUTION_BUSY',409);
     const id=randomUUID(), started=this.now(), controller=new AbortController();

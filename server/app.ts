@@ -29,7 +29,7 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   const metrics = dependencies.metrics || new RuntimeMetrics(); metrics.start();
   const tasks = new TaskService(db, { ...dependencies, limits, metrics });
   const model = dependencies.model || new ModelClient();
-  const modelTests = new ModelTestsService(db, model, dependencies.source === 'FIXTURE' ? 'FIXTURE' : 'LIVE');
+  const modelTests = new ModelTestsService(db, model, dependencies.source === 'FIXTURE' ? 'FIXTURE' : 'LIVE',Date.now,process.env,limits);
   const publications = new PublicationService(db, process.env, limits), storage = new StorageGuard(db, limits);
   const app = Fastify({ logger: logger ? logOptions : false, bodyLimit: 16384, trustProxy: false, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
   app.addHook('preClose', async () => { await tasks.close(); await modelTests.close(); metrics.close(); });

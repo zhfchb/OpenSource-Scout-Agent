@@ -71,7 +71,7 @@ with sync_playwright() as p:
     guest.goto(base + '/#/reports')
     guest.get_by_role('heading', name='还没有公开报告').wait_for()
     page.get_by_role('button', name='设置与限额').click()
-    page.get_by_role('heading', name='03 / 存储与运行观察').wait_for()
+    page.get_by_role('heading', name='04 / 存储与运行观察').wait_for()
     page.get_by_role('button', name='清理过期会话与发布预览').click()
     page.get_by_text('没有删除任务、审核包或公开历史', exact=False).wait_for()
     page.get_by_role('button', name='退出登录').click()

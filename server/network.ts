@@ -32,6 +32,6 @@ export const boundedJson: Transport = async (url, init, maxBytes, timeoutMs) => 
     return JSON.parse(Buffer.concat(parts).toString('utf8'));
   } catch(error) {
     if(parsed.hostname!=='api.deepseek.com'||error instanceof DomainError) throw error;
-    throw new DomainError(init.signal?.aborted?'REQUEST_ABORTED':signal.aborted?'MODEL_TIMEOUT':'INVALID_MODEL_JSON',502);
+    throw new DomainError(init.signal?.aborted?'REQUEST_ABORTED':signal.aborted?'MODEL_TIMEOUT':error instanceof SyntaxError?'INVALID_MODEL_JSON':'MODEL_NETWORK_FAILED',502);
   } finally { await reader.cancel().catch(() => {}); }
 };

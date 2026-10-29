@@ -2,21 +2,25 @@ import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { defaults, assertSettings } from './config.js';
 import { GithubClient, parseGithubUrl, type Settings, type Snapshot } from './github.js';
-import { ModelClient, prepareContext, type Analysis } from './model.js';
+import { ModelClient, prepareContext, preparePatchRequest, type Analysis } from './model.js';
 import { DomainError } from './network.js';
+import { ReviewService } from './review.js';
+import { checkPatch, type PlanContent } from './patch.js';
+import { digest } from './auth.js';
 
-interface Task { id: string; repo: string; issue_number: number; status: string; attempt: number; config_snapshot: string; snapshot: string | null; request_key: string | null }
+interface Task { id: string; repo: string; issue_number: number; status: string; phase: string; data_source: string; attempt: number; config_snapshot: string; snapshot: string | null; analysis: string | null; request_key: string | null }
 export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE' };
 export class TaskService {
+  readonly review: ReviewService;
   private github: GithubClient; private model: ModelClient;
   private running?: { id: string; controller: AbortController };
   private pumping?: Promise<void>;
   private closed = false;
-  constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); }
+  constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); this.review = new ReviewService(db); }
   settings(): Settings { return { ...defaults, ...JSON.parse((this.db.prepare('SELECT value FROM settings WHERE id = 1').get() as { value: string }).value) }; }
   ready() { return this.model.available(this.settings()); }
   async issues(url: string) { return this.github.listIssues(url, this.settings(), new AbortController().signal); }
-  list() { return this.db.prepare('SELECT id, repo, issue_number, base_sha, status, current_step, attempt, error_code, created_at, updated_at FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT 50').all(); }
+  list() { return this.db.prepare('SELECT id, repo, issue_number, base_sha, status, phase, current_step, attempt, error_code, created_at, updated_at FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT 50').all(); }
   detail(id: string) {
     const task = this.get(id);
     const { config_snapshot: _private, request_key: _key, snapshot, ...rest } = task;
@@ -24,7 +28,7 @@ export class TaskService {
     return { ...rest, snapshot: data ? { ...data, files: data.files.map(({ content: _content, ...f }) => f) } : null,
       analysis: JSON.parse((this.db.prepare('SELECT analysis FROM tasks WHERE id = ?').get(id) as { analysis: string | null }).analysis || 'null'),
       steps: this.db.prepare('SELECT attempt, step, status, summary, created_at FROM task_steps WHERE task_id = ? ORDER BY id').all(id),
-      usage: this.db.prepare('SELECT attempt, reserved_tokens, actual_tokens, state FROM usage WHERE task_id = ? ORDER BY id').all(id), projectTests: 'NOT_RUN', source: this.deps.source || 'LIVE_API' };
+      usage: this.db.prepare('SELECT attempt, reserved_tokens, actual_tokens, state FROM usage WHERE task_id = ? ORDER BY id').all(id), projectTests: 'NOT_RUN', source: task.data_source, ...this.review.view(id) };
   }
   private get(id: string): Task {
     const row = this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Task | undefined;
@@ -43,7 +47,7 @@ export class TaskService {
     if (!this.model.available(settings)) throw new DomainError('MODEL_NOT_CONFIGURED');
     if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
     const id = randomUUID();
-    this.db.prepare("INSERT INTO tasks(id, repo, issue_number, status, config_snapshot, request_key) VALUES (?, ?, ?, 'QUEUED', ?, ?)").run(id, target.repo, target.issue, JSON.stringify(settings), key);
+    this.db.prepare("INSERT INTO tasks(id, repo, issue_number, status, config_snapshot, request_key, data_source) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)").run(id, target.repo, target.issue, JSON.stringify(settings), key, this.deps.source || 'LIVE_API');
     this.kick(); return { id, duplicate: false };
   }
   cancel(id: string) {
@@ -55,6 +59,7 @@ export class TaskService {
   }
   retry(id: string, expectedAttempt: number) {
     const task = this.get(id);
+    if (task.phase === 'PATCH') throw new DomainError('PATCH_REQUIRES_NEW_PLAN', 409);
     if (task.attempt !== expectedAttempt || !['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(task.status)) throw new DomainError('RETRY_CONFLICT', 409);
     if (this.db.prepare("SELECT 1 FROM tasks WHERE repo = ? AND issue_number = ? AND id != ? AND status IN ('QUEUED','RUNNING')").get(task.repo, task.issue_number, id)) throw new DomainError('TASK_ALREADY_ACTIVE', 409);
     if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
@@ -62,6 +67,24 @@ export class TaskService {
     if (!this.model.available(JSON.parse(task.config_snapshot))) throw new DomainError('MODEL_NOT_CONFIGURED');
     this.db.prepare("UPDATE tasks SET status = 'QUEUED', attempt = attempt + 1, error_code = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ?").run(id, expectedAttempt);
     this.kick(); return { ok: true };
+  }
+  generate(id: string, planId: string, hash: string, baseSha: string) {
+    const result = this.db.transaction(() => {
+      const plan = this.review.match(id, planId, hash, baseSha), task = this.get(id);
+      if (!plan.confirmed_at) throw new DomainError('PLAN_CONFIRMATION_REQUIRED', 409);
+      if (plan.requested_at) return { id, duplicate: true };
+      if (task.status !== 'WAITING_CONFIRMATION') throw new DomainError('PATCH_TASK_NOT_READY', 409);
+      if (this.db.prepare("SELECT 1 FROM tasks WHERE repo = ? AND issue_number = ? AND id != ? AND status IN ('QUEUED','RUNNING')").get(task.repo, task.issue_number, id)) throw new DomainError('TASK_ALREADY_ACTIVE', 409);
+      if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
+      const settings = JSON.parse(task.config_snapshot);
+      try { assertSettings(settings); } catch { throw new DomainError('INVALID_SETTINGS'); }
+      if (!this.model.available(settings)) throw new DomainError('MODEL_NOT_CONFIGURED');
+      preparePatchRequest(JSON.parse(task.snapshot!), JSON.parse(task.analysis!), JSON.parse(plan.content), settings);
+      this.db.prepare('UPDATE plans SET requested_at = CURRENT_TIMESTAMP WHERE id = ? AND requested_at IS NULL').run(plan.id);
+      this.db.prepare("UPDATE tasks SET status = 'QUEUED', phase = 'PATCH', current_step = 'patch', attempt = attempt + 1, error_code = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+      return { id, duplicate: false };
+    })();
+    this.kick(); return result;
   }
   private live(task: Task) { return Boolean(this.db.prepare("SELECT 1 FROM tasks WHERE id = ? AND status = 'RUNNING' AND attempt = ?").get(task.id, task.attempt)); }
   private step(task: Task, name: string, summary: string) {
@@ -77,7 +100,7 @@ export class TaskService {
     while (!this.closed) {
       const task = this.db.prepare("SELECT * FROM tasks WHERE status = 'QUEUED' ORDER BY created_at, rowid LIMIT 1").get() as Task | undefined;
       if (!task) break;
-      const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.snapshot ? 'analysis' : 'source', task.id);
+      const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source', task.id);
       if (!claim.changes) continue;
       const controller = new AbortController(); this.running = { id: task.id, controller };
       try { await this.run(task, controller.signal); }
@@ -92,6 +115,7 @@ export class TaskService {
     }
   }
   private async run(task: Task, signal: AbortSignal) {
+    if (task.phase === 'PATCH') return this.runPatch(task, signal);
     const settings: Settings = JSON.parse(task.config_snapshot);
     // Snapshots are immutable across manual retry; no network inside a SQLite transaction.
     let context: Snapshot;
@@ -110,11 +134,7 @@ export class TaskService {
     if (!this.live(task)) return;
     this.db.prepare("UPDATE tasks SET current_step = 'analysis' WHERE id = ? AND attempt = ?").run(task.id, task.attempt);
     const reserved = prepareContext(context, settings).reservedTokens;
-    const usageId = this.db.transaction(() => {
-      const used = this.db.prepare('SELECT count(*) AS calls, coalesce(sum(coalesce(actual_tokens, reserved_tokens)), 0) AS tokens FROM usage WHERE task_id = ?').get(task.id) as { calls: number; tokens: number };
-      if (used.calls >= settings.maxCallsPerTask || used.tokens + reserved > settings.maxTokensPerTask) throw new DomainError('TASK_BUDGET_EXCEEDED');
-      return this.db.prepare("INSERT INTO usage(task_id, attempt, reserved_tokens, state) VALUES (?, ?, ?, 'RESERVED')").run(task.id, task.attempt, reserved).lastInsertRowid;
-    })();
+    const usageId = this.reserve(task, reserved);
     let analysis: Analysis;
     try {
       analysis = await this.model.analyze(context, settings, signal, tokens => {
@@ -127,6 +147,41 @@ export class TaskService {
     this.db.transaction(() => {
       this.db.prepare("UPDATE tasks SET analysis = ?, status = 'WAITING_CONFIRMATION', current_step = 'analysis', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ? AND status = 'RUNNING'").run(result, task.id, task.attempt);
       this.step(task, 'analysis', '结构化分析已保存；模型引文已与实际输入核对，仍需人工审查，未执行项目测试。');
+    })();
+  }
+  private reserve(task: Task, reserved: number) {
+    const settings = JSON.parse(task.config_snapshot);
+    return this.db.transaction(() => {
+      const used = this.db.prepare('SELECT count(*) AS calls, coalesce(sum(coalesce(actual_tokens, reserved_tokens)), 0) AS tokens FROM usage WHERE task_id = ?').get(task.id) as { calls: number; tokens: number };
+      if (used.calls >= settings.maxCallsPerTask || used.tokens + reserved > settings.maxTokensPerTask) throw new DomainError('TASK_BUDGET_EXCEEDED');
+      return this.db.prepare("INSERT INTO usage(task_id, attempt, reserved_tokens, state) VALUES (?, ?, ?, 'RESERVED')").run(task.id, task.attempt, reserved).lastInsertRowid;
+    })();
+  }
+  private async runPatch(task: Task, signal: AbortSignal) {
+    const row = this.review.latest(task.id);
+    if (!row?.confirmed_at || !row.requested_at) throw new DomainError('PLAN_CONFIRMATION_REQUIRED', 409);
+    const plan = this.review.checkBinding(task.id, row);
+    const snapshot = JSON.parse(task.snapshot!) as Snapshot, analysis = JSON.parse(task.analysis!) as Analysis, settings = JSON.parse(task.config_snapshot) as Settings;
+    const { reservedTokens } = preparePatchRequest(snapshot, analysis, plan, settings);
+    const usageId = this.reserve(task, reservedTokens);
+    let output: unknown;
+    try {
+      output = await this.model.generatePatch(snapshot, analysis, plan, settings, signal, tokens => {
+        this.db.prepare('UPDATE usage SET actual_tokens = ?, state = ? WHERE id = ?').run(tokens, tokens === null ? 'UNKNOWN' : 'KNOWN', usageId);
+      });
+    } finally { this.db.prepare("UPDATE usage SET state = 'UNKNOWN' WHERE id = ? AND state = 'RESERVED'").run(usageId); }
+    if (!this.live(task) || signal.aborted) return;
+    const checked = checkPatch(output, plan, snapshot, settings);
+    const prDraft = `# ${checked.patch.prTitle}\n\n> UNVERIFIED · 未编译、未测试、未应用。编译/测试：NOT_RUN。需人工核实以下模型草稿。\n\n${checked.patch.prBody}`;
+    const bundle = { schemaVersion: 1, patchStatus: 'UNVERIFIED', compilation: 'NOT_RUN', projectTests: 'NOT_RUN', source: task.data_source, repo: task.repo, issueNumber: task.issue_number, commit: snapshot.commit,
+      plan: { id: row.id, hash: row.hash, content: plan }, analysis, patch: checked.patch, prDraft, checks: checked.checks, createdAt: new Date().toISOString() };
+    const content = JSON.stringify(bundle), bytes = Buffer.byteLength(content);
+    if (bytes > settings.maxArtifactBytes) throw new DomainError('REVIEW_BUNDLE_SIZE_EXCEEDED', 502);
+    this.db.transaction(() => {
+      this.review.checkBinding(task.id, row);
+      this.db.prepare('INSERT INTO artifacts(id, task_id, plan_id, content, hash, bytes) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), task.id, row.id, content, digest(content), bytes);
+      this.db.prepare("UPDATE tasks SET status = 'COMPLETED', current_step = 'patch', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ? AND status = 'RUNNING'").run(task.id, task.attempt);
+      this.step(task, 'patch', '单次补丁审核包已保存；仅完成格式、范围、路径与原始行核对，UNVERIFIED，编译/测试 NOT_RUN。');
     })();
   }
   async close() {

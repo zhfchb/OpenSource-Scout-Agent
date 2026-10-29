@@ -9,6 +9,7 @@ import { type Config, defaults, settingsSchema } from './config.js';
 import { csrfToken, digest, newToken, verifyPassword } from './auth.js';
 import { TaskService, type TaskDependencies } from './tasks.js';
 import { DomainError } from './network.js';
+import type { PlanInput } from './patch.js';
 
 export const logOptions = {
   level: 'info',
@@ -38,7 +39,7 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   const cookieOptions = { httpOnly: true, secure: config.secureCookie, sameSite: 'strict' as const, path: '/' };
   const sessionFor = (raw: string | undefined) => raw && /^[a-f0-9]{64}$/.test(raw) ? db.prepare('SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ?').get(digest(raw), Date.now()) : undefined;
   app.get('/api/health', async (_req, reply) => {
-    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M1' }; }
+    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M2' }; }
     catch { return reply.code(503).send({ status: 'unhealthy', database: 'unavailable' }); }
   });
   app.post<{ Body: { password: string } }>('/api/auth/login', {
@@ -62,13 +63,13 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
       if (!sessionFor(raw)) return reply.code(401).send({ error: 'AUTHENTICATION_REQUIRED' });
       if (!['GET', 'HEAD'].includes(req.method) && req.headers['x-csrf-token'] !== csrfToken(raw!)) return reply.code(403).send({ error: 'CSRF_REJECTED' });
     });
-    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M1' }));
+    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M2' }));
     admin.post('/logout', async (req, reply) => {
       db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(digest(req.cookies.scout_session!));
       reply.clearCookie('scout_session', cookieOptions);
       return { ok: true };
     });
-    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M1' }));
+    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M2' }));
     const urlBody = { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string', minLength: 1, maxLength: 500 } } };
     const taskParams = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[a-f0-9-]{36}$' } } };
     admin.post<{ Body: { url: string } }>('/issues', { schema: { body: urlBody }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => tasks.issues(req.body.url));
@@ -76,6 +77,21 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
     admin.get<{ Params: { id: string } }>('/tasks/:id', { schema: { params: taskParams } }, async req => tasks.detail(req.params.id));
     admin.post<{ Params: { id: string } }>('/tasks/:id/cancel', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false } } }, async req => tasks.cancel(req.params.id));
     admin.post<{ Params: { id: string }; Body: { expectedAttempt: number } }>('/tasks/:id/retry', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['expectedAttempt'], properties: { expectedAttempt: { type: 'integer', minimum: 0 } } } } }, async req => tasks.retry(req.params.id, req.body.expectedAttempt));
+    const sha = { type: 'string', pattern: '^[a-f0-9]{40}$' }, hash = { type: 'string', pattern: '^[a-f0-9]{64}$' };
+    const uuid = { type: 'string', pattern: '^[a-f0-9-]{36}$' };
+    const binding = { type: 'object', additionalProperties: false, required: ['planId', 'hash', 'baseSha'], properties: { planId: uuid, hash, baseSha: sha } };
+    admin.post<{ Params: { id: string }; Body: PlanInput & { expectedVersion: number; baseSha: string } }>('/tasks/:id/plans', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['steps', 'allowedPaths', 'allowSensitive', 'allowDependencies', 'expectedVersion', 'baseSha'], properties: {
+      steps: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 2000 } }, allowedPaths: { type: 'array', minItems: 1, maxItems: 50, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 240 } }, allowSensitive: { type: 'boolean' }, allowDependencies: { type: 'boolean' }, expectedVersion: { type: 'integer', minimum: 0 }, baseSha: sha,
+    } } } }, async req => tasks.review.save(req.params.id, req.body, req.body.expectedVersion, req.body.baseSha));
+    admin.post<{ Params: { id: string }; Body: { planId: string; hash: string; baseSha: string } }>('/tasks/:id/plan/confirm', { schema: { params: taskParams, body: binding } }, async req => tasks.review.confirm(req.params.id, req.body.planId, req.body.hash, req.body.baseSha));
+    admin.post<{ Params: { id: string }; Body: { planId: string; hash: string; baseSha: string } }>('/tasks/:id/patch', { schema: { params: taskParams, body: binding } }, async (req, reply) => reply.code(202).send(tasks.generate(req.params.id, req.body.planId, req.body.hash, req.body.baseSha)));
+    const artifactParams = { type: 'object', additionalProperties: false, required: ['id', 'artifactId'], properties: { id: uuid, artifactId: uuid } };
+    admin.post<{ Params: { id: string; artifactId: string }; Body: { hash: string; status: 'REVIEWED' | 'REJECTED' } }>('/tasks/:id/artifacts/:artifactId/review', { schema: { params: artifactParams, body: { type: 'object', additionalProperties: false, required: ['hash', 'status'], properties: { hash, status: { type: 'string', enum: ['REVIEWED', 'REJECTED'] } } } } }, async req => tasks.review.review(req.params.id, req.params.artifactId, req.body.hash, req.body.status));
+    admin.get<{ Params: { id: string; artifactId: string }; Querystring: { format: 'bundle' | 'diff' | 'pr' } }>('/tasks/:id/artifacts/:artifactId/download', { schema: { params: artifactParams, querystring: { type: 'object', additionalProperties: false, required: ['format'], properties: { format: { type: 'string', enum: ['bundle', 'diff', 'pr'] } } } } }, async (req, reply) => {
+      const download = tasks.review.download(req.params.id, req.params.artifactId, req.query.format);
+      return reply.type(download.type).header('Content-Disposition', `attachment; filename="${download.filename}"`).send(download.content);
+    });
+    admin.put<{ Params: { id: string }; Body: { url: string; status: 'DRAFT' | 'OPEN' | 'MERGED' | 'CLOSED' } }>('/tasks/:id/manual-pr', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['url', 'status'], properties: { url: { type: 'string', minLength: 1, maxLength: 500 }, status: { type: 'string', enum: ['DRAFT', 'OPEN', 'MERGED', 'CLOSED'] } } } } }, async req => tasks.review.recordPr(req.params.id, req.body.url, req.body.status));
     admin.get('/settings', async () => ({ settings: tasks.settings(), modelConfigured: tasks.ready(), provider: 'DeepSeek', policy: { targetCodeExecution: false, githubAccess: 'READ_ONLY', patchStatus: 'UNVERIFIED', projectTests: 'NOT_RUN', activeTasks: 1 } }));
     admin.put<{ Body: typeof defaults }>('/settings', { schema: { body: settingsSchema } }, async req => {
       db.prepare('UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1').run(JSON.stringify(req.body));

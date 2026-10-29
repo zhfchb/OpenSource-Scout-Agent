@@ -1,0 +1,10 @@
+import { loadConfig } from './config.js';
+import { openDatabase } from './db.js';
+import { buildApp } from './app.js';
+const config = loadConfig();
+const db = openDatabase(config.dbPath);
+const app = await buildApp(config, db);
+app.addHook('onClose', async () => { db.close(); });
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => { void app.close(); });
+await app.listen({ host: config.host, port: config.port });
+app.log.info({ rssBytes: process.memoryUsage().rss, freeMemoryBytes: (await import('node:os')).freemem(), phase: 'M0' }, 'Startup baseline; not a 2GB capacity test');

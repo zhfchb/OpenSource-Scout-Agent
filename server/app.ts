@@ -26,7 +26,8 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers.origin !== config.origin) return reply.code(403).send({ error: 'ORIGIN_REJECTED' });
   });
   app.setErrorHandler((error, req, reply) => {
-    const status = error.statusCode && error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 500;
+    const code = (error as { statusCode?: number }).statusCode;
+    const status = code && code >= 400 && code < 500 ? code : 500;
     if (status === 500) req.log.error({ code: 'INTERNAL_ERROR' }, 'Request failed');
     reply.code(status).send({ error: status === 400 ? 'INVALID_INPUT' : status === 429 ? 'RATE_LIMITED' : 'REQUEST_FAILED' });
   });

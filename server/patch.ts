@@ -29,7 +29,7 @@ export function canonicalPlan(input: PlanInput, taskId: string, version: number,
 export function checkPatch(value: unknown, plan: PlanContent, source: Snapshot, settings: Settings) {
   const patch = value as PatchOutput;
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k => !['diff', 'prTitle', 'prBody'].includes(k)) || typeof patch.diff !== 'string' || !patch.diff || typeof patch.prTitle !== 'string' || !patch.prTitle.trim() || patch.prTitle.length > 200 || typeof patch.prBody !== 'string' || !patch.prBody.trim() || patch.prBody.length > 20000) throw new DomainError('INVALID_PATCH_OUTPUT', 502);
-  if (Buffer.byteLength(JSON.stringify(patch)) > settings.maxArtifactBytes || patch.diff.includes('\0') || patch.diff.includes('\r') || !patch.diff.endsWith('\n')) throw new DomainError('PATCH_SIZE_OR_ENCODING_REJECTED', 502);
+  if (Buffer.byteLength(JSON.stringify(patch)) > settings.maxArtifactBytes || patch.diff.includes('\0') || patch.diff.includes('\r') || patch.prBody.includes('\0') || /[\x00-\x1f\x7f]/.test(patch.prTitle) || !patch.diff.endsWith('\n')) throw new DomainError('PATCH_SIZE_OR_ENCODING_REJECTED', 502);
   const lines = patch.diff.split('\n'); lines.pop();
   const existingImports = new Set(source.files.flatMap(file => externalImports(file.content)));
   const changed: string[] = []; let i = 0, totalChanges = 0;

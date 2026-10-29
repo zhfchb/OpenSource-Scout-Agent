@@ -1,13 +1,13 @@
 :root {
   font-family:'Segoe UI','Microsoft YaHei',sans-serif;
-  color:#243630;
-  background:#f6f7f2;
+  color:#263e55;
+  background:#f5f9fd;
   font-synthesis:none;
   font-size:14px;
-  --ink:#173d32;
-  --muted:#748079;
-  --line:#dce2da;
-  --accent:#c2ec8b}
+  --ink:#245a83;
+  --muted:#647b91;
+  --line:#d9e6f1;
+  --accent:#b9ddfb}
 * {
   box-sizing:border-box}
 body {
@@ -25,15 +25,15 @@ button:disabled {
   cursor:not-allowed;
   opacity:.65}
 button:focus-visible,input:focus-visible {
-  outline:3px solid #83ad51;
+  outline:3px solid #519bd7;
   outline-offset:3px}
 input {
   width:100%;
   padding:12px;
-  border:1px solid #ccd6cd;
+  border:1px solid #cbddea;
   border-radius:4px;
   background:#fff;
-  color:#243630}
+  color:#263e55}
 label {
   display:block;
   font-weight:600;
@@ -57,7 +57,7 @@ h2 {
 .eyebrow {
   font-size:10px;
   letter-spacing:2px;
-  color:#7a887e;
+  color:#68829a;
   margin-bottom:20px;
   font-weight:700}
 .brand {
@@ -68,7 +68,7 @@ h2 {
   font-weight:700}
 .mark {
   background:var(--accent);
-  color:#183b30;
+  color:#245a83;
   padding:8px;
   font-size:24px;
   font-family:Georgia,serif;
@@ -76,19 +76,19 @@ h2 {
 .brand small {
   display:block;
   font-size:10px;
-  color:#93aaa0;
+  color:#5d7d99;
   letter-spacing:2px;
   margin-top:7px;
   font-weight:400}
 .primary {
-  background:var(--ink);
+  background:#347fb8;
   color:#fff;
-  border-color:var(--ink)}
+  border-color:#347fb8}
 .dot {
   display:inline-block;
   width:7px;
   height:7px;
-  background:#80a857;
+  background:#4a98d2;
   border-radius:50%;
   margin-right:8px}
 .login-shell {
@@ -96,24 +96,24 @@ h2 {
   display:grid;
   grid-template-columns:1fr 1fr}
 .intro {
-  background:#173d32;
-  color:#eef4e9;
+  background:#e6f2fc;
+  color:#234d70;
   padding:55px 10%;
   display:flex;
   flex-direction:column;
   justify-content:space-between;
   min-height:100vh}
 .intro .eyebrow {
-  color:#b0cbac}
+  color:#527d9f}
 .intro h1 {
   font-size:clamp(36px,4vw,60px);
   line-height:1.6;
   margin:35px 0}
 .intro-copy {
   line-height:2.2;
-  color:#b4c9bc}
+  color:#547a98}
 .intro small {
-  color:#a8c0af;
+  color:#577f9f;
   font-size:12px}
 .login-form {
   max-width:420px;
@@ -131,7 +131,7 @@ h2 {
   width:100%}
 .login-foot {
   margin-top:50px;
-  color:#687b70;
+  color:#607e98;
   font-size:12px;
   line-height:2}
 .login-foot small {
@@ -146,8 +146,8 @@ h2 {
 aside {
   width:245px;
   flex-shrink:0;
-  background:#173d32;
-  color:#edf3e8;
+  background:#e6f2fc;
+  color:#244e70;
   padding:34px 23px;
   display:flex;
   flex-direction:column;
@@ -157,12 +157,12 @@ aside {
 .nav-label {
   font-size:9px;
   letter-spacing:2px;
-  color:#89a798;
+  color:#6689a5;
   margin:55px 12px 18px}
 nav button {
   width:100%;
   background:none;
-  color:#b0c6bb;
+  color:#4d718f;
   border:0;
   text-align:left;
   display:flex;
@@ -171,13 +171,13 @@ nav button {
   margin-bottom:8px;
   font-size:13px}
 nav button.active {
-  background:#2b5243;
-  color:#d8f2bc}
+  background:#cce5fa;
+  color:#1e5b8d}
 nav button>span:first-child {
   font-size:20px}
 .nav-count {
   margin-left:auto;
-  background:#173d32;
+  background:#e6f2fc;
   padding:2px 7px;
   border-radius:4px;
   font-size:11px}
@@ -186,17 +186,17 @@ nav button>span:first-child {
   padding:20px 10px 0}
 .phase {
   font-size:9px;
-  color:#b2d48d;
+  color:#397aaa;
   letter-spacing:1px}
 .aside-bottom p {
   line-height:1.8;
-  color:#91ab9c;
+  color:#5c809b;
   font-size:13px;
   margin-top:18px}
 .logout {
   background:none;
   border:0;
-  color:#d0ddcf;
+  color:#356d98;
   padding:12px 0;
   font-size:12px}
 .main {
@@ -210,10 +210,10 @@ header {
   justify-content:space-between;
   padding:0 48px;
   font-size:12px;
-  color:#718176}
+  color:#658098}
 .slash {
   margin:0 15px;
-  color:#b0baaf}
+  color:#a0b6c9}
 .owner {
   font-size:11px}
 .content {
@@ -228,16 +228,16 @@ header {
 .count {
   font-family:Georgia,serif;
   font-size:22px;
-  color:#9ba89a;
+  color:#8ba8bf;
   margin-left:18px}
 .badge {
   font-size:10px;
   white-space:nowrap;
   padding:7px 12px;
-  background:#e7efdd;
-  border:1px solid #d0dfbf;
+  background:#e8f4fe;
+  border:1px solid #c8e2f6;
   border-radius:4px;
-  color:#527040}
+  color:#3776a4}
 .workflow {
   display:flex;
   justify-content:space-between;
@@ -246,7 +246,7 @@ header {
   border-bottom:1px solid var(--line);
   padding:24px 0;
   margin:28px 0 38px;
-  color:#64766a}
+  color:#58768e}
 .workflow div {
   display:flex;
   gap:13px;
@@ -254,11 +254,11 @@ header {
   font-size:12px}
 .workflow b {
   font-family:Georgia,serif;
-  color:#8f9f8e;
+  color:#7e9db5;
   font-weight:400;
   font-size:21px}
 .workflow i {
-  color:#b4c2b0}
+  color:#aac5da}
 .section-heading {
   display:flex;
   justify-content:space-between;
@@ -269,7 +269,7 @@ header {
   margin:0}
 .section-heading span {
   font-size:10px;
-  color:#83907f}
+  color:#7892a8}
 .empty {
   background:white;
   border:1px solid var(--line);
@@ -277,12 +277,12 @@ header {
   min-height:340px;
   padding:42px 24px;
   text-align:center;
-  background-image:radial-gradient(#e3e9dd .6px,transparent .6px);
+  background-image:radial-gradient(#e0edf8 .6px,transparent .6px);
   background-size:14px 14px}
 .empty-symbol {
   font-family:Georgia,serif;
   font-size:36px;
-  color:#72905c;
+  color:#5c9ac7;
   margin-bottom:22px}
 .empty h2 {
   font-weight:500;
@@ -290,37 +290,37 @@ header {
 .empty p {
   font-size:12px;
   line-height:2;
-  color:#7a897b}
+  color:#678299}
 .empty button {
   margin:12px 0 16px;
-  background:#f1f5e9;
-  border-color:#dce4cf;
+  background:#edf6fe;
+  border-color:#d1e5f5;
   font-size:12px}
 .empty-note {
   display:block;
   font-size:10px;
-  color:#8f9c89}
+  color:#7d9ab1}
 .boundary {
   margin-top:24px;
   display:flex;
   align-items:center;
   gap:15px;
-  color:#7c8b7b;
+  color:#69869e;
   font-size:11px;
   line-height:1.8}
 .boundary>span {
   font-size:23px;
-  color:#8c9f7b}
+  color:#80a7c5}
 .boundary p {
   margin:0}
 .boundary strong {
   font-weight:500;
-  color:#52674f}
+  color:#3d6e94}
 footer {
   padding:22px 48px;
   font-size:9px;
   letter-spacing:1.5px;
-  color:#93a08c;
+  color:#7896ad;
   display:flex;
   justify-content:space-between;
   border-top:1px solid var(--line)}
@@ -360,7 +360,7 @@ footer span {
   justify-content:space-between}
 .loading {
   padding:60px;
-  color:#6b806b}
+  color:#5f819e}
 @media(max-width:1000px) {
   aside {
   width:205px}

@@ -9,6 +9,7 @@ import { openDatabase } from '../server/db.js';
 import { loadConfig, defaults } from '../server/config.js';
 import { digest } from '../server/auth.js';
 import pino from 'pino';
+import { spawnSync } from 'node:child_process';
 const salt = 'a'.repeat(32), password = 'fixture-password-only';
 const hash = `scrypt$${salt}$${scryptSync(password, salt, 64).toString('hex')}`;
 const config = () => loadConfig({ ADMIN_PASSWORD_HASH: hash });
@@ -95,5 +96,23 @@ test('application server contains no child-process or target execution entry poi
   for (const name of readdirSync('server').filter(name => name.endsWith('.ts'))) {
     assert.doesNotMatch(readFileSync(join('server', name), 'utf8'), /child_process|\beval\s*\(|new Function|docker\.sock/);
   }
+});
+
+test('compiled backup preserves source task status and restores an integral database', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scout-backup-'));
+  const path = join(dir, 'source.sqlite');
+  const db = openDatabase(path);
+  try {
+    db.prepare("INSERT INTO tasks(id, repo, issue_number, status, config_snapshot) VALUES ('running', 'fixture/repo', 1, 'RUNNING', '{}')").run();
+    const result = spawnSync(process.execPath, ['dist/server/backup.js', join(dir, 'backups')], { env: { ...process.env, DB_PATH: path }, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal((db.prepare('SELECT status FROM tasks').get() as any).status, 'RUNNING');
+    const restored = openDatabase(join(dir, 'backups', readdirSync(join(dir, 'backups'))[0]), false);
+    try {
+      assert.equal(restored.pragma('integrity_check', { simple: true }), 'ok');
+      assert.equal((restored.prepare('SELECT status FROM tasks').get() as any).status, 'RUNNING');
+      assert.equal((restored.prepare('SELECT value FROM settings').get() as any).value, JSON.stringify(defaults));
+    } finally { restored.close(); }
+  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -4,12 +4,14 @@ import { digest } from './auth.js';
 import { DomainError } from './network.js';
 import { canonicalPlan, type PlanInput, type PlanContent } from './patch.js';
 import type { Snapshot } from './github.js';
+import { StorageGuard, type StorageLimits } from './storage.js';
 
 export interface PlanRow { id: string; task_id: string; version: number; content: string; hash: string; confirmed_at: string | null; requested_at: string | null }
 export interface ArtifactRow { id: string; task_id: string; plan_id: string; content: string; hash: string; bytes: number; review_status: string }
 interface ReviewTask { id: string; status: string; phase: string; analysis: string | null; snapshot: string | null; base_sha: string | null }
 export class ReviewService {
-  constructor(private db: Database.Database) {}
+  private guard: StorageGuard;
+  constructor(private db: Database.Database, limits?: StorageLimits) { this.guard = new StorageGuard(db, limits); }
   private task(id: string) {
     const task = this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as ReviewTask | undefined;
     if (!task) throw new DomainError('TASK_NOT_FOUND', 404);
@@ -24,6 +26,7 @@ export class ReviewService {
   save(taskId: string, input: PlanInput, expectedVersion: number, baseSha: string) {
     return this.db.transaction(() => {
       const task = this.task(taskId);
+      this.guard.plan(taskId);
       if (!task.analysis || !task.snapshot || ['QUEUED', 'RUNNING'].includes(task.status)) throw new DomainError('PLAN_NOT_EDITABLE', 409);
       const latest = this.latest(taskId);
       if ((latest?.version || 0) !== expectedVersion || task.base_sha !== baseSha) throw new DomainError('PLAN_VERSION_CONFLICT', 409);

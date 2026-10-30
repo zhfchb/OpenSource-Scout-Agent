@@ -9,6 +9,8 @@ import { checkPatch, type PlanContent } from './patch.js';
 import { digest } from './auth.js';
 import { StorageGuard, type StorageLimits } from './storage.js';
 import type { RuntimeMetrics } from './metrics.js';
+import { executionSlot } from './execution-slot.js';
+import { errorGuidance } from './error-guidance.js';
 
 interface Task { id: string; repo: string; issue_number: number; status: string; phase: string; data_source: string; attempt: number; config_snapshot: string; snapshot: string | null; analysis: string | null; request_key: string | null }
 export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE'; limits?: StorageLimits; metrics?: RuntimeMetrics };
@@ -19,16 +21,19 @@ export class TaskService {
   private running?: { id: string; controller: AbortController };
   private pumping?: Promise<void>;
   private closed = false;
-  constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); this.review = new ReviewService(db, deps.limits); this.guard = new StorageGuard(db, deps.limits); }
+  private unsubscribe: () => void;
+  constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); this.review = new ReviewService(db, deps.limits); this.guard = new StorageGuard(db, deps.limits); this.unsubscribe = executionSlot(db).subscribe(() => this.kick()); }
   settings(): Settings { return { ...defaults, ...JSON.parse((this.db.prepare('SELECT value FROM settings WHERE id = 1').get() as { value: string }).value) }; }
   ready() { return this.model.available(this.settings()); }
-  async issues(url: string) { return this.github.listIssues(url, this.settings(), new AbortController().signal); }
+  async issues(url: string) { const release = executionSlot(this.db).acquire(); if (!release) throw new DomainError('EXECUTION_BUSY', 409); try { return await this.github.listIssues(url, this.settings(), new AbortController().signal); } finally { release(); } }
   list() { return this.db.prepare('SELECT id, repo, issue_number, base_sha, status, phase, current_step, attempt, error_code, created_at, updated_at FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT 50').all(); }
   detail(id: string) {
     const task = this.get(id);
     const { config_snapshot: _private, request_key: _key, snapshot, ...rest } = task;
     const data = snapshot ? JSON.parse(snapshot) as Snapshot : null;
-    return { ...rest, snapshot: data ? { ...data, files: data.files.map(({ content: _content, ...f }) => f) } : null,
+    const failure = this.db.prepare('SELECT error_code, error_request_id, current_step FROM tasks WHERE id=?').get(id) as {error_code:string|null;error_request_id:string|null;current_step:string|null};
+    const errorDetails = failure.error_code ? {code:failure.error_code,requestId:failure.error_request_id,step:failure.current_step,...errorGuidance(failure.error_code),resultsSaved:Boolean(task.analysis),usageUnknown:Boolean(this.db.prepare("SELECT 1 FROM usage WHERE task_id=? AND state='UNKNOWN'").get(id))} : null;
+    return { ...rest, errorDetails, snapshot: data ? { ...data, files: data.files.map(({ content: _content, ...f }) => f) } : null,
       analysis: JSON.parse((this.db.prepare('SELECT analysis FROM tasks WHERE id = ?').get(id) as { analysis: string | null }).analysis || 'null'),
       steps: this.db.prepare('SELECT attempt, step, status, summary, created_at FROM task_steps WHERE task_id = ? ORDER BY id').all(id),
       usage: this.db.prepare('SELECT attempt, reserved_tokens, actual_tokens, state FROM usage WHERE task_id = ? ORDER BY id').all(id), projectTests: 'NOT_RUN', source: task.data_source, ...this.review.view(id) };
@@ -52,6 +57,7 @@ export class TaskService {
     if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
     const id = randomUUID();
     this.db.prepare("INSERT INTO tasks(id, repo, issue_number, status, config_snapshot, request_key, data_source) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)").run(id, target.repo, target.issue, JSON.stringify(settings), key, this.deps.source || 'LIVE_API');
+    this.db.prepare('UPDATE tasks SET settings_revision=(SELECT revision FROM settings WHERE id=1) WHERE id=?').run(id);
     this.kick(); return { id, duplicate: false };
   }
   cancel(id: string) {
@@ -104,8 +110,10 @@ export class TaskService {
     while (!this.closed) {
       const task = this.db.prepare("SELECT * FROM tasks WHERE status = 'QUEUED' ORDER BY created_at, rowid LIMIT 1").get() as Task | undefined;
       if (!task) break;
+      const release = executionSlot(this.db).acquire();
+      if (!release) break;
       const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source', task.id);
-      if (!claim.changes) continue;
+      if (!claim.changes) { release(); continue; }
       const controller = new AbortController(); this.running = { id: task.id, controller };
       this.deps.metrics?.mark(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source');
       try { await this.run(task, controller.signal); }
@@ -113,10 +121,11 @@ export class TaskService {
         if (this.live(task)) {
           const code = error instanceof DomainError ? error.code : controller.signal.aborted ? 'REQUEST_ABORTED' : 'STEP_REQUEST_FAILED';
           this.db.prepare("UPDATE tasks SET status = 'FAILED', error_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ? AND status = 'RUNNING'").run(code, task.id, task.attempt);
+          this.db.prepare('UPDATE tasks SET error_request_id=? WHERE id=?').run(randomUUID(),task.id);
           const step = (this.db.prepare('SELECT current_step FROM tasks WHERE id = ?').get(task.id) as { current_step: string }).current_step;
           this.db.prepare("INSERT INTO task_steps(task_id, attempt, step, status, summary) VALUES (?, ?, ?, 'FAILED', ?)").run(task.id, task.attempt, step, code);
         }
-      } finally { this.running = undefined; this.deps.metrics?.mark('idle'); }
+      } finally { this.running = undefined; this.deps.metrics?.mark('idle'); release(); }
     }
   }
   private async run(task: Task, signal: AbortSignal) {
@@ -196,6 +205,7 @@ export class TaskService {
   }
   async close() {
     this.closed = true;
+    this.unsubscribe();
     if (this.running) {
       this.db.prepare("UPDATE tasks SET status = 'INTERRUPTED', attempt = attempt + 1 WHERE id = ? AND status = 'RUNNING'").run(this.running.id);
       this.running.controller.abort();

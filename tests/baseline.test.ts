@@ -31,7 +31,7 @@ test('migration persists settings, detects tampering and interrupts only running
     db.close(); db = openDatabase(path);
     assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 't1'").get() as any).status, 'INTERRUPTED');
     assert.equal((db.prepare("SELECT status FROM tasks WHERE id = 't2'").get() as any).status, 'WAITING_CONFIRMATION');
-    assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as any).n, 4);
+    assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as any).n, 5);
     db.prepare("UPDATE schema_migrations SET checksum = 'tampered'").run();
     db.close();
     assert.throws(() => openDatabase(path), /checksum/);
@@ -59,7 +59,7 @@ test('admin authentication, session hashes, CSRF, strict schemas, persistence, e
     for (const payload of [{ ...defaults, secret: 'forbidden' }, { ...defaults, maxFiles: 0 }, { ...defaults, modelKeyRef: 'sk-secret' }, { ...defaults, maxFiles: '20' }]) {
       assert.equal((await app.inject({ method: 'PUT', url: '/api/admin/settings', headers, payload })).statusCode, 400);
     }
-    assert.equal((await app.inject({ method: 'PUT', url: '/api/admin/settings', headers, payload: { ...defaults, model: 'fixture-model' } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'PUT', url: '/api/admin/settings', headers, payload: { settings: { ...defaults, model: 'fixture-model' }, expectedRevision: 1 } })).statusCode, 200);
     assert.equal((await app.inject({ url: '/api/admin/settings', headers })).json().settings.model, 'fixture-model');
     assert.deepEqual((await app.inject({ url: '/api/admin/tasks', headers })).json().items, []);
     assert.equal((await app.inject({ method: 'POST', url: '/api/admin/tasks', headers, payload: {} })).statusCode, 400);

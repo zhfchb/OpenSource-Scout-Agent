@@ -13,6 +13,10 @@ import type { PlanInput } from './patch.js';
 import { PublicationService, type PublicDraft } from './publication.js';
 import { StorageGuard } from './storage.js';
 import { RuntimeMetrics } from './metrics.js';
+import { ModelClient } from './model.js';
+import { ModelTestsService } from './model-tests.js';
+import { savedSettings, saveSettings } from './settings.js';
+import { errorGuidance } from './error-guidance.js';
 
 export const logOptions = {
   level: 'info',
@@ -24,9 +28,11 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   const limits = dependencies.limits || config.storage;
   const metrics = dependencies.metrics || new RuntimeMetrics(); metrics.start();
   const tasks = new TaskService(db, { ...dependencies, limits, metrics });
+  const model = dependencies.model || new ModelClient();
+  const modelTests = new ModelTestsService(db, model, dependencies.source === 'FIXTURE' ? 'FIXTURE' : 'LIVE',Date.now,process.env,limits);
   const publications = new PublicationService(db, process.env, limits), storage = new StorageGuard(db, limits);
   const app = Fastify({ logger: logger ? logOptions : false, bodyLimit: 16384, trustProxy: false, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
-  app.addHook('preClose', async () => { await tasks.close(); metrics.close(); });
+  app.addHook('preClose', async () => { await tasks.close(); await modelTests.close(); metrics.close(); });
   await app.register(cookie);
   await app.register(rateLimit, { global: false, max: 5, timeWindow: '1 minute', cache: 1000 });
   app.addHook('onRequest', async (req, reply) => {
@@ -38,14 +44,15 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   });
   app.setErrorHandler((error, req, reply) => {
     const code = (error as { statusCode?: number }).statusCode;
-    const status = code && code >= 400 && code < 500 ? code : 500;
+    const status = code && code >= 400 && code < 600 ? code : 500;
     if (status === 500) req.log.error({ code: 'INTERNAL_ERROR' }, 'Request failed');
-    reply.code(status).send({ error: error instanceof DomainError ? error.code : status === 400 ? 'INVALID_INPUT' : status === 429 ? 'RATE_LIMITED' : 'REQUEST_FAILED' });
+    const errorCode = error instanceof DomainError ? error.code : status === 400 ? 'INVALID_INPUT' : status === 429 ? 'RATE_LIMITED' : 'REQUEST_FAILED';
+    reply.code(status).send({ error: errorCode, requestId:req.id, guidance:errorGuidance(errorCode) });
   });
   const cookieOptions = { httpOnly: true, secure: config.secureCookie, sameSite: 'strict' as const, path: '/' };
   const sessionFor = (raw: string | undefined) => raw && /^[a-f0-9]{64}$/.test(raw) ? db.prepare('SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ?').get(digest(raw), Date.now()) : undefined;
   app.get('/api/health', async (_req, reply) => {
-    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M3' }; }
+    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M4' }; }
     catch { return reply.code(503).send({ status: 'unhealthy', database: 'unavailable' }); }
   });
   app.get<{ Querystring: { page?: string } }>('/api/public/reports', { schema: { querystring: { type: 'object', additionalProperties: false, properties: { page: { type: 'string', pattern: '^[1-9][0-9]{0,2}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.list(Number(req.query.page || 1)));
@@ -71,13 +78,13 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
       if (!sessionFor(raw)) return reply.code(401).send({ error: 'AUTHENTICATION_REQUIRED' });
       if (!['GET', 'HEAD'].includes(req.method) && req.headers['x-csrf-token'] !== csrfToken(raw!)) return reply.code(403).send({ error: 'CSRF_REJECTED' });
     });
-    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M3' }));
+    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M4' }));
     admin.post('/logout', async (req, reply) => {
       db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(digest(req.cookies.scout_session!));
       reply.clearCookie('scout_session', cookieOptions);
       return { ok: true };
     });
-    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M3' }));
+    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M4' }));
     const urlBody = { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string', minLength: 1, maxLength: 500 } } };
     const taskParams = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[a-f0-9-]{36}$' } } };
     admin.post<{ Body: { url: string } }>('/issues', { schema: { body: urlBody }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => tasks.issues(req.body.url));
@@ -107,11 +114,12 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
       return reply.type(download.type).header('Content-Disposition', `attachment; filename="${download.filename}"`).send(download.content);
     });
     admin.put<{ Params: { id: string }; Body: { url: string; status: 'DRAFT' | 'OPEN' | 'MERGED' | 'CLOSED' } }>('/tasks/:id/manual-pr', { schema: { params: taskParams, body: { type: 'object', additionalProperties: false, required: ['url', 'status'], properties: { url: { type: 'string', minLength: 1, maxLength: 500 }, status: { type: 'string', enum: ['DRAFT', 'OPEN', 'MERGED', 'CLOSED'] } } } } }, async req => tasks.review.recordPr(req.params.id, req.body.url, req.body.status));
-    admin.get('/settings', async () => ({ settings: tasks.settings(), modelConfigured: tasks.ready(), provider: 'DeepSeek', policy: { targetCodeExecution: false, githubAccess: 'READ_ONLY', patchStatus: 'UNVERIFIED', projectTests: 'NOT_RUN', activeTasks: 1 } }));
-    admin.put<{ Body: typeof defaults }>('/settings', { schema: { body: settingsSchema } }, async req => {
-      db.prepare('UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1').run(JSON.stringify(req.body));
-      return { ok: true };
-    });
+    admin.get('/settings', async () => ({ ...savedSettings(db), modelConfigured: tasks.ready(), provider: 'DeepSeek', policy: { targetCodeExecution: false, githubAccess: 'READ_ONLY', patchStatus: 'UNVERIFIED', projectTests: 'NOT_RUN', activeTasks: 1 } }));
+    admin.put<{ Body: {settings:typeof defaults; expectedRevision:number} }>('/settings', { schema: { body: {type:'object',additionalProperties:false,required:['settings','expectedRevision'],properties:{settings:settingsSchema,expectedRevision:{type:'integer',minimum:1}}} } }, async req => saveSettings(db,req.body.settings,req.body.expectedRevision,model));
+    admin.get('/model-diagnostics', async () => modelTests.diagnostics());
+    admin.post<{Body:{requestKey:string;settingsRevision:number;acknowledgeCost:true}}>('/model-tests', {schema:{body:{type:'object',additionalProperties:false,required:['requestKey','settingsRevision','acknowledgeCost'],properties:{requestKey:{type:'string',pattern:'^[a-zA-Z0-9-]{16,80}$'},settingsRevision:{type:'integer',minimum:1},acknowledgeCost:{const:true}}}}}, async(req,reply)=>reply.code(202).send(modelTests.start(req.body.requestKey,req.body.settingsRevision)));
+    admin.get<{Params:{id:string}}>('/model-tests/:id',{schema:{params:taskParams}},async req=>modelTests.read(req.params.id));
+    admin.post<{Params:{id:string};Body:{expectedAttempt:number}}>('/model-tests/:id/cancel',{schema:{params:taskParams,body:{type:'object',additionalProperties:false,required:['expectedAttempt'],properties:{expectedAttempt:{type:'integer',minimum:0}}}}},async req=>modelTests.cancel(req.params.id,req.body.expectedAttempt));
   }, { prefix: '/api/admin' });
   const frontend = resolve('frontend/dist');
   if (existsSync(frontend)) await app.register(staticFiles, { root: frontend, index: ['index.html'], dotfiles: 'deny' });

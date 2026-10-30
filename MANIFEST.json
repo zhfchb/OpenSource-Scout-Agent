@@ -1,19 +1,19 @@
 {
   "docs/产品需求文档.md": {
-    "bytes": 6324,
-    "sha256": "13f683addd69ecdf1e372315a4e8c8b5f5724a43bb1a430dafb8f4e7bda64005"
+    "bytes": 11029,
+    "sha256": "67e9dc0463d64a32244106411a12d79359f7ebd034476c1f4c1757483cf273a4"
   },
   "docs/技术架构.md": {
-    "bytes": 6683,
-    "sha256": "ca47a29b39f59dc88a66febed1d2c5ea8af6745540ea61c9126fd88ff4c88a41"
+    "bytes": 11365,
+    "sha256": "9da66db50b80c88a7aa00624ee6f834dafc02621b8273b3fb2ec3145c84eb544"
   },
   "docs/开发路线图.md": {
-    "bytes": 3694,
-    "sha256": "ed91ef327f27c3ccc5339db0d4129ccf528c46cb351264e87d7d7c29f090f7b7"
+    "bytes": 8960,
+    "sha256": "31959ea76529e57ccd23c2381d7ced821afda3b6ee00038dcec84663905ff29d"
   },
   "docs/开发启动提示词.md": {
-    "bytes": 3176,
-    "sha256": "77dee317a2aa59d4e62cf91d3cb38a64133c63e14bd41979dfdb5ccdedb4713a"
+    "bytes": 5742,
+    "sha256": "2d22a753ff655c75ff3eedf988dedb4423489b380ff3c7a8552fcdb5ee16da34"
   },
   "docs/历史归档/v1.0/产品需求文档.md": {
     "bytes": 16272,
@@ -36,7 +36,51 @@
     "sha256": "9d6a5c7adbcc21b2aed92bbab055c4b66db697216dc5743d7d90156f5ac64d8d"
   },
   "docs/设计决策记录.md": {
-    "bytes": 3950,
-    "sha256": "5098409d7283aecb098b7dfc8f1686ebc32c96e3e7665db427836aa0e346705c"
+    "bytes": 8531,
+    "sha256": "9c7495fb125473478a5b71f80ff70aa10f33ea6c231449f3ffa4175ade0a1403"
+  },
+  "README.md": {
+    "bytes": 5852,
+    "sha256": "1e680efdeca6f6c5d4945bc6bc2334691c1fdf8d3383feb56b12316216cc12fc"
+  },
+  "docs/部署运维.md": {
+    "bytes": 7973,
+    "sha256": "b39f504c69d46526a4df1d98cafb33c49e3d643b807d2667e075f7c0de81230b"
+  },
+  "docs/文档导航与实施状态.md": {
+    "bytes": 4786,
+    "sha256": "3e9a1480ce8930702295660223dfa0d5d5c8d68c65dfd0093008890ccb2fd6e8"
+  },
+  "docs/验收与发布标准.md": {
+    "bytes": 11093,
+    "sha256": "53db56eaa2c80ccdc9a6167d2cfd74c57474c86085e35ececbf59d3d648d77c5"
+  },
+  "docs/M1使用说明.md": {
+    "bytes": 5210,
+    "sha256": "b703ee69fb8f59b19506561f65675cccb872b34335e3ef2a89f84b041a6d3a88"
+  },
+  "docs/M2使用说明.md": {
+    "bytes": 6006,
+    "sha256": "9b094cf93b819e6f23826e204739f52b79a431c7eebe23bb294209ce8ee21b57"
+  },
+  "docs/M3使用与运维.md": {
+    "bytes": 8422,
+    "sha256": "10f6caaec7b0b0fd8893feb0c43050879c40677339973892c106166bfa28e455"
+  },
+  "docs/M4真实模型联调设计.md": {
+    "bytes": 10686,
+    "sha256": "007519440ac71697c16071313405c7c7773833e6e44bb3c8d0077fdc89550553"
+  },
+  "docs/M5使用说明.md": {
+    "bytes": 3389,
+    "sha256": "202a99fe6ddfb83df3544dab1cfb1df2fdfe84e5e79c22ef0cdaa1b491e18851"
+  },
+  "docs/M5自动发现设计.md": {
+    "bytes": 18869,
+    "sha256": "c4e1203b709b798bd2b8657d39e907ebb581b39ec06a91074f5224bde13069be"
+  },
+  "docs/M4使用说明.md": {
+    "bytes": 4365,
+    "sha256": "1569776183c3a98ce8b31ec748e500e6302410df867908df282b23151be443ad"
   }
 }

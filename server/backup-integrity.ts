@@ -15,7 +15,7 @@ export function inspectBackup(path: string) {
     }
     const tables: Record<string, { rows: number; sha256: string }> = {};
     // Fixed allowlist; iterate to avoid loading all artifacts into memory.
-    for (const table of ['schema_migrations', 'settings', 'sessions', 'tasks', 'task_steps', 'usage', 'plans', 'artifacts', 'manual_pr_records', 'publication_previews', 'publications']) {
+    for (const table of ['schema_migrations', 'settings', 'sessions', 'tasks', 'task_steps', 'usage', 'plans', 'artifacts', 'manual_pr_records', 'publication_previews', 'publications', 'model_tests', 'model_test_guard']) {
       if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)) continue;
       const hash = createHash('sha256'); let rows = 0;
       for (const row of db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).iterate()) { hash.update(JSON.stringify(row) + '\n'); rows++; }

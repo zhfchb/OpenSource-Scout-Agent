@@ -12,7 +12,7 @@ export function loadStorageLimits(env: NodeJS.ProcessEnv = process.env): Storage
 export class StorageGuard {
   constructor(private db: Database.Database, readonly limits: StorageLimits = loadStorageLimits()) {}
   usage() {
-    return { databaseAllocatedBytes: Number(this.db.pragma('page_count', { simple: true })) * Number(this.db.pragma('page_size', { simple: true })), artifactBytes: (this.db.prepare('SELECT coalesce(sum(bytes), 0) AS n FROM artifacts').get() as { n: number }).n, tasks: (this.db.prepare('SELECT count(*) AS n FROM tasks').get() as { n: number }).n, publications: (this.db.prepare('SELECT count(*) AS n FROM publications').get() as { n: number }).n, limits: this.limits, cache: 'NO_SOURCE_DISK_CACHE' };
+    return { modelTests: (this.db.prepare('SELECT count(*) AS n FROM model_tests').get() as {n:number}).n, modelTestLimit: 1000, databaseAllocatedBytes: Number(this.db.pragma('page_count', { simple: true })) * Number(this.db.pragma('page_size', { simple: true })), artifactBytes: (this.db.prepare('SELECT coalesce(sum(bytes), 0) AS n FROM artifacts').get() as { n: number }).n, tasks: (this.db.prepare('SELECT count(*) AS n FROM tasks').get() as { n: number }).n, publications: (this.db.prepare('SELECT count(*) AS n FROM publications').get() as { n: number }).n, limits: this.limits, cache: 'NO_SOURCE_DISK_CACHE' };
   }
   writable(bytes = 0) {
     const used = Number(this.db.pragma('page_count', { simple: true })) * Number(this.db.pragma('page_size', { simple: true }));

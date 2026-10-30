@@ -32,6 +32,7 @@ export function openDatabase(path: string, recover = true, limits: StorageLimits
       }
       db.prepare('INSERT OR IGNORE INTO settings(id, value) VALUES (1, ?)').run(JSON.stringify(defaults));
       if (recover) {
+        db.prepare("UPDATE model_tests SET status='INTERRUPTED', finished_at=?, usage_state=CASE WHEN usage_state='RESERVED' THEN 'UNKNOWN' ELSE usage_state END WHERE status='RUNNING'").run(Date.now());
         db.prepare("UPDATE tasks SET status = 'INTERRUPTED', updated_at = CURRENT_TIMESTAMP WHERE status IN ('RUNNING','QUEUED')").run();
         db.prepare("UPDATE usage SET state = 'UNKNOWN' WHERE state = 'RESERVED'").run();
       }

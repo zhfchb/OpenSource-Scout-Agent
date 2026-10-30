@@ -8,6 +8,8 @@ Vue 3 + TypeScript + Fastify + SQLite，一个 Node 进程提供构建后的页�
 
 M4 使用与预算说明见 [模型诊断与主动连接测试](docs/M4使用说明.md)。
 
+M5 后的 [v2 发布准备](docs/v2发布准备.md) 已提供本地检查、候选运行包、完整性校验、独立冒烟与配置预检；本地通过不等于云端发布通过。
+
 ## 当前可用
 
 - 技术画像、立即/每日定时发现、稳定 ID 私有候选、忽略/收藏/仓库排除、人工复核后进入分析；可选小额模型评估默认关闭。
@@ -61,3 +63,5 @@ PowerShell 可用 `Read-Host -MaskInput` 接收密码，再通过管道传给脚
 ## 部署与阶段证据
 
 见 [部署、备份与恢复](docs/部署运维.md)、[M0 验证记录](evidence/M0/验收记录.md)、[M1 验证记录](evidence/M1/验收记录.md)、[M2 验证记录](evidence/M2/验收记录.md)、[M3 验证记录与 F01–F12 结论](evidence/M3/验收记录.md)。Linux/systemd/HTTPS 和 2GB 容量仍需在真实云环境验证，本机结果不能替代这些验收。
+
+发布工具本地验证见 [v2 发布准备记录](evidence/v2-release/验收记录.md)。先执行 `npm run release:check`，干净提交后执行 `npm run release:pack`；运行包仍明确标为未完成真实发布验收的候选。

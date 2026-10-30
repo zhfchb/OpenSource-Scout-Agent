@@ -97,6 +97,28 @@ export async function smokeRuntime(root, { dependencyRoot, reuseDependencies = f
         check('logout', response.status === 200);
         check('logout-invalidates-session', (await request('/api/admin/settings', { headers })).status === 401);
         check('no-work-started', db.prepare('SELECT count(*) AS n FROM tasks').get().n === 0 && db.prepare('SELECT count(*) AS n FROM discovery_runs').get().n === 0 && db.prepare('SELECT count(*) AS n FROM model_tests').get().n === 0 && db.prepare('SELECT count(*) AS n FROM discovery_evaluations').get().n === 0 && report.externalRequests === 0);
+        await app.close();
+        const { buildUserApp } = await import(pathToFileURL(join(root, 'dist/server/user-app.js')).href);
+        const accountConfig = { ...config, dbPath: join(scratch, 'account-owner.sqlite') };
+        app = await buildUserApp(accountConfig, false);
+        await app.listen({ host: '127.0.0.1', port: 0 });
+        const accountAddress = app.server.address();
+        if (!accountAddress || typeof accountAddress === 'string') throw new Error('SMOKE_ACCOUNT_LISTEN_FAILED');
+        allowedOrigin = 'http://127.0.0.1:' + accountAddress.port;
+        const accountRequest = (path, init = {}) => fetch(allowedOrigin + path, { redirect: 'error', signal: AbortSignal.timeout(10000), ...init });
+        response = await accountRequest('/api/auth/register', { method: 'POST', headers: { Origin: accountConfig.origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'smoke_member', password }) });
+        const memberCookie = response.headers.get('set-cookie')?.split(';')[0], member = await response.json();
+        check('account-registration', response.status === 201 && Boolean(memberCookie) && member.user.role === 'user');
+        const memberHeaders = { Cookie: memberCookie, Origin: accountConfig.origin, 'Content-Type': 'application/json', 'X-CSRF-Token': member.csrfToken };
+        response = await accountRequest('/api/admin/tasks', { headers: memberHeaders });
+        check('account-fresh-workspace', response.status === 200 && (await response.json()).items.length === 0);
+        response = await accountRequest('/api/account/credentials', { headers: memberHeaders });
+        const memberCredentials = await response.json();
+        check('account-no-inherited-keys', !memberCredentials.modelKeyPresent && !memberCredentials.githubTokenPresent);
+        check('account-cannot-manage-users', (await accountRequest('/api/account/users', { headers: memberHeaders })).status === 403);
+        check('account-logout', (await accountRequest('/api/admin/logout', { method: 'POST', headers: memberHeaders, body: '{}' })).status === 200);
+        check('account-session-revoked', (await accountRequest('/api/admin/tasks', { headers: memberHeaders })).status === 401);
+        check('account-no-external-requests', report.externalRequests === 0);
         report.status = 'PASS';
         return report;
     }

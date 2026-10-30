@@ -17,6 +17,7 @@ export class ExecutionSlot {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
 }
 const slots = new WeakMap<Database.Database, ExecutionSlot>();
+export function shareExecutionSlot(db:Database.Database, slot:ExecutionSlot) { slots.set(db,slot); }
 export function executionSlot(db: Database.Database) {
   let slot = slots.get(db); if (!slot) { slot = new ExecutionSlot(); slots.set(db, slot); } return slot;
 }

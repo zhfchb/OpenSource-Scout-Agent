@@ -32,14 +32,15 @@ export const logOptions = {
 export async function buildApp(config: Config, db: Database.Database, logger = true, dependencies: TaskDependencies = {}) {
   const limits = dependencies.limits || config.storage;
   const metrics = dependencies.metrics || new RuntimeMetrics(); metrics.start();
+  const env = dependencies.env || process.env;
   const githubBudget=new GithubBudget(db,dependencies.discoveryTransport);
-  const github=dependencies.github||new GithubClient((...args)=>githubBudget.scope('legacy:'+randomUUID(),1,2097152,300,120000,false)(...args));
-  const tasks = new TaskService(db, { ...dependencies, github, limits, metrics });
-  const model = dependencies.model || new ModelClient();
-  const discovery=new DiscoveryService(db,tasks,model,dependencies.discoveryTransport,dependencies.source||'LIVE_API',Date.now,limits,process.env,metrics);
+  const github=dependencies.github||new GithubClient((...args)=>githubBudget.scope('legacy:'+randomUUID(),1,2097152,300,120000,false)(...args),env);
+  const model = dependencies.model || new ModelClient(undefined,env);
+  const tasks = new TaskService(db, { ...dependencies, github, model, limits, metrics });
+  const discovery=new DiscoveryService(db,tasks,model,dependencies.discoveryTransport,dependencies.source||'LIVE_API',Date.now,limits,env,metrics);
   tasks.setSourceGate((...args)=>discovery.gate(...args));discovery.startScheduler();
-  const modelTests = new ModelTestsService(db, model, dependencies.source === 'FIXTURE' ? 'FIXTURE' : 'LIVE',Date.now,process.env,limits);
-  const publications = new PublicationService(db, process.env, limits), storage = new StorageGuard(db, limits);
+  const modelTests = new ModelTestsService(db, model, dependencies.source === 'FIXTURE' ? 'FIXTURE' : 'LIVE',Date.now,env,limits);
+  const publications = new PublicationService(db, env, limits), storage = new StorageGuard(db, limits);
   const app = Fastify({ logger: logger ? logOptions : false, bodyLimit: 16384, trustProxy: false, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
   app.addHook('preClose', async () => { await discovery.close();await tasks.close(); await modelTests.close(); metrics.close(); });
   await app.register(cookie);
@@ -60,6 +61,7 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   });
   const cookieOptions = { httpOnly: true, secure: config.secureCookie, sameSite: 'strict' as const, path: '/' };
   const sessionFor = (raw: string | undefined) => raw && /^[a-f0-9]{64}$/.test(raw) ? db.prepare('SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ?').get(digest(raw), Date.now()) : undefined;
+  app.get('/api/auth/options',async()=>({registrationEnabled:false,legacyOwnerAvailable:true,singleAccount:true}));
   app.get('/api/health', async (_req, reply) => {
     try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M5' }; }
     catch { return reply.code(503).send({ status: 'unhealthy', database: 'unavailable' }); }

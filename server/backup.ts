@@ -1,9 +1,10 @@
 import Database from 'better-sqlite3';
 import { resolve } from 'node:path';
-import { mkdirSync, chmodSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, chmodSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { fileHash, inspectBackup } from './backup-integrity.js';
 const directory = resolve(process.argv[2] || 'data/backups');
+if(existsSync(resolve(process.env.DB_PATH||'data/scout.sqlite')+'.accounts.sqlite'))console.log('SINGLE_WORKSPACE_BACKUP_ONLY: multi-account recovery also requires the account registry, encryption key and all workspace databases. See docs/账号与独立工作台.md.');
 mkdirSync(directory, { recursive: true, mode: 0o700 });
 const maxBackups = Number(process.env.MAX_BACKUPS || 7);
 if (!Number.isInteger(maxBackups) || maxBackups < 1 || maxBackups > 100) throw new Error('MAX_BACKUPS must be 1..100');

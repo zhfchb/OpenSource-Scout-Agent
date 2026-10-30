@@ -15,7 +15,7 @@ import {enqueue,queueHead,queueCount,finishWork,cancelQueued} from './work-queue
 import type {Transport} from './network.js';
 
 interface Task { id: string; repo: string; issue_number: number; status: string; phase: string; data_source: string; attempt: number; config_snapshot: string; snapshot: string | null; analysis: string | null; request_key: string | null }
-export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE'; limits?: StorageLimits; metrics?: RuntimeMetrics; discoveryTransport?:Transport; sourceGate?:(taskId:string,signal:AbortSignal,snapshot?:Snapshot)=>Promise<boolean> };
+export type TaskDependencies = { github?: GithubClient; model?: ModelClient; env?:NodeJS.ProcessEnv; source?: 'LIVE_API' | 'FIXTURE'; limits?: StorageLimits; metrics?: RuntimeMetrics; discoveryTransport?:Transport; sourceGate?:(taskId:string,signal:AbortSignal,snapshot?:Snapshot)=>Promise<boolean> };
 export class TaskService {
   readonly review: ReviewService;
   private guard: StorageGuard;

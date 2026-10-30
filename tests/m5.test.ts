@@ -418,3 +418,17 @@ test('pre-M5 backup migrates target and recovery guard while source remains at s
     const backup=spawnSync(process.execPath,['dist/server/backup.js',join(dir,'backups')],{env:{...process.env,DB_PATH:path},encoding:'utf8'});assert.equal(backup.status,0,backup.stderr);const source=join(dir,'backups',readdirSync(join(dir,'backups')).find(n=>n.endsWith('.sqlite'))!),target=join(dir,'target.sqlite');const restore=spawnSync(process.execPath,['dist/server/restore.js',source,target],{encoding:'utf8'});assert.equal(restore.status,0,restore.stderr);const migrated=openDatabase(target);try{assert.equal((migrated.prepare('SELECT enabled,evaluation_enabled FROM discovery_control').get() as any).enabled,0);assert.ok((migrated.prepare('SELECT blocked_until_utc AS n FROM model_test_guard').get() as any).n>Date.now());}finally{migrated.close();}assert.equal(db.prepare("SELECT 1 FROM sqlite_master WHERE name='discovery_control'").get(),undefined);
   }finally{db.close();rmSync(dir,{recursive:true,force:true});}
 });
+test('stale GitHub reset headers use conservative cooldown instead of a one-second retry',async()=>{
+    const db=openDatabase(':memory:'),now=Date.now();
+    try{const budget=new GithubBudget(db,async(_u,_i,_c,_t,observe)=>{observe?.({status:403,bytes:0,remaining:0,resource:'search',resetAt:now-1000});throw new DomainError('REMOTE_RATE_OR_PERMISSION');},()=>now);await assert.rejects(budget.scope('discovery:stale',1,1000)('https://api.github.com/search/repositories?q=Java',{method:'GET'},1000,1000),/COOLDOWN/);assert.equal(budget.cooldowns()[0].not_before,now+900000);}finally{db.close();}
+});
+test('new hard bounds block old profile runs and candidate selection never hijacks a historical request key',async()=>{
+  const x=setup();try{
+    x.d.save(profileDefaults,0,false,'OWNER');x.d.hard.maxRepos=1;assert.throws(()=>x.d.start(randomUUID(),1),/HARD_LIMIT/);x.d.hard.maxRepos=20;
+    const legacyKey=randomUUID(),legacy=x.tasks.create('https://github.com/owner/repo/issues/1',legacyKey);await x.tasks.idle();
+    x.d.start(randomUUID(),1);await x.d.idle();const selected=x.d.select(202,legacyKey,1);await immediate();await x.d.idle();const checked=x.d.selection(selected.id);const next=x.d.confirm(selected.id,checked.hash,true);assert.notEqual(next.task_id,legacy.id);assert.equal((x.db.prepare('SELECT source_selection_id FROM tasks WHERE id=?').get(legacy.id) as any).source_selection_id,null);await x.tasks.idle();
+  }finally{await x.close();}
+});
+test('refreshing a completed selection cannot overwrite its existing analysis',async()=>{
+  const x=setup();try{x.d.save(profileDefaults,0,false,'OWNER');x.d.start(randomUUID(),1);await x.d.idle();const s=x.d.select(202,randomUUID(),1);await immediate();await x.d.idle();const checked=x.d.selection(s.id),next=x.d.confirm(s.id,checked.hash,true);await x.tasks.idle();const original=x.tasks.detail(next.task_id).analysis;assert.ok(original);x.d.refreshSelection(s.id);await immediate();await x.d.idle();assert.throws(()=>x.d.confirm(s.id,x.d.selection(s.id).hash,true),/NEW_SELECTION_REQUIRED/);assert.deepEqual(x.tasks.detail(next.task_id).analysis,original);assert.equal(x.fixture.modelCalls,1);}finally{await x.close();}
+});

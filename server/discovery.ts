@@ -124,6 +124,7 @@ export class DiscoveryService {
             return this.run(existing.id);
         }
         const current = this.profile();
+        validateProfile(current.profile,this.hard);
         if (!current.revision)
             throw new DomainError('DISCOVERY_PROFILE_REQUIRED');
         if (current.revision !== revision)
@@ -470,8 +471,8 @@ export class DiscoveryService {
             if (selection.task_id)
                 this.tasks.resumeSource(selection.task_id);
             else {
-                const task = this.tasks.create(`https://github.com/${selection.content.repo.name}/issues/${selection.content.issue.number}`, selection.request_key);
-                this.db.prepare('UPDATE tasks SET source_selection_id=? WHERE id=?').run(id, task.id);
+                const task = this.tasks.create(`https://github.com/${selection.content.repo.name}/issues/${selection.content.issue.number}`, 'candidate-'+id);
+                if(!task.duplicate)this.db.prepare('UPDATE tasks SET source_selection_id=? WHERE id=?').run(id, task.id);
                 this.db.prepare('UPDATE candidate_analysis_links SET task_id=? WHERE id=?').run(task.id, id);
             }
             this.db.prepare("UPDATE candidate_analysis_links SET status='ANALYSIS_QUEUED' WHERE id=?").run(id);

@@ -1,4 +1,5 @@
 export function errorGuidance(code:string) {
+  if(code==='SOURCE_NEW_SELECTION_REQUIRED')return {category:'SOURCE_RECHECK',message:'原任务已经保存分析，不能覆盖已有结果。',nextAction:'打开关联任务查看；如需使用新配置重新分析，请确认新费用后新建选择。'};
   if(/DISCOVERY_COST_CONFIRMATION/.test(code))return {category:'COST_CONFIRMATION',message:'请先明确确认模型费用。',nextAction:'开启评估会作用于后续手动与定时发现；确认后再保存，或保持关闭使用规则候选。'};
   if(/DISCOVERY_PROFILE_REQUIRED|INVALID_DISCOVERY_PROFILE|DISCOVERY_HARD_LIMIT/.test(code))return {category:'PROFILE',message:'画像尚未保存或字段不符合边界。',nextAction:'填写至少一种语言，检查 Star 范围和资源限额，保存后再发现。'};
   if(/SOURCE_|CANDIDATE_EXCLUDED/.test(code))return {category:'SOURCE_RECHECK',message:'来源需要重新复核，或已被关闭、忽略或排除。',nextAction:'打开机会发现中的候选，重新复核并核对风险；关闭来源不能开始付费分析。'};

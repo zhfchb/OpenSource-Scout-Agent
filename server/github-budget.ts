@@ -29,7 +29,9 @@ export class GithubBudget {
                 this.db.prepare('UPDATE github_request_budget SET bytes=? WHERE id=?').run(m.bytes, result.lastInsertRowid);
                 if (m.remaining === 0 || m.status === 429 || m.status === 403) {
                     const primary = m.remaining === 0, confirmed = primary || m.status === 429 || Boolean(m.retryAt);
-                    const until = Math.max(now + 1000, Math.min(now + 86400000, m.retryAt || (primary ? m.resetAt : undefined) || now + 900000));
+                    const hint=m.retryAt||(primary?m.resetAt:undefined);
+                    // A cached/stale reset is not a usable future retry time.
+                    const until = Math.min(now + 86400000, hint&&Number.isFinite(hint)&&hint>now?hint:now+900000);
                     // Primary exhaustion stops all GitHub traffic; secondary/unknown applies conservatively.
                     this.db.prepare('INSERT INTO github_cooldowns VALUES(?,?,?) ON CONFLICT(resource) DO UPDATE SET not_before=max(not_before,excluded.not_before),reason=excluded.reason').run(primary && resource === 'core' ? '*' : resource, until, confirmed ? 'RATE_LIMIT' : 'FORBIDDEN_UNKNOWN');
                 }

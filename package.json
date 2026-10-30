@@ -15,7 +15,14 @@
     "backup": "node --env-file-if-exists=.env dist/server/backup.js",
     "backup:verify": "node dist/server/verify-backup.js",
     "restore": "node dist/server/restore.js",
-    "capacity:probe": "node scripts/capacity-probe.mjs"
+    "capacity:probe": "node scripts/capacity-probe.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "release:pack": "node scripts/release-pack.mjs",
+    "release:verify": "node scripts/release-verify.mjs",
+    "release:extract": "node scripts/release-extract.mjs",
+    "release:smoke": "node scripts/release-smoke.mjs",
+    "deploy:check": "node scripts/deploy-check.mjs",
+    "docs:manifest": "node scripts/docs-manifest.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",

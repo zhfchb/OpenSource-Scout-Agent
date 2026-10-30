@@ -21,7 +21,8 @@
     "release:verify": "node scripts/release-verify.mjs",
     "release:extract": "node scripts/release-extract.mjs",
     "release:smoke": "node scripts/release-smoke.mjs",
-    "deploy:check": "node scripts/deploy-check.mjs"
+    "deploy:check": "node scripts/deploy-check.mjs",
+    "docs:manifest": "node scripts/docs-manifest.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",

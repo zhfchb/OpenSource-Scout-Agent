@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { createPackage, collectPayload, inputFingerprint, gitState, buildFingerprint, verifyArchive, verifyEntries, encodeArchive, decodeArchive, extractArchive, sha256, pendingValidation, verifyDocuments, cleanBuildOutputs } from '../scripts/release-lib.mjs';
+import { createPackage, collectPayload, inputFingerprint, gitState, buildFingerprint, verifyArchive, verifyEntries, encodeArchive, decodeArchive, extractArchive, sha256, pendingValidation, verifyDocuments, cleanBuildOutputs, refreshDocumentManifest } from '../scripts/release-lib.mjs';
 import { smokeArchive, checkInstalledDependencies } from '../scripts/release-smoke-lib.mjs';
 import { checkDeploymentText } from '../scripts/deploy-check-lib.mjs';
 import { scryptSync } from 'node:crypto';
@@ -114,6 +114,7 @@ test('documentation hashes and symbolic output paths fail closed', () => {
         assert.equal(verifyDocuments(root), 1);
         put(root, 'docs/test.md', 'changed');
         assert.throws(() => verifyDocuments(root), /MANIFEST_MISMATCH/);
+        put(root,'docs/test.md','fixture\r\n');assert.throws(()=>verifyDocuments(root),/EOL_MISMATCH/);refreshDocumentManifest(root);assert.equal(readFileSync(join(root,'docs/test.md'),'utf8'),'fixture\n');assert.equal(verifyDocuments(root),1);
         mkdirSync(join(root, 'outside'), { recursive: true });
         put(root, 'outside/secret.txt', 'fixture-private');
         link = join(root, 'frontend/dist/linked');

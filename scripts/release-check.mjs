@@ -35,11 +35,12 @@ try {
     report.localValidation = 'PASS';
 }
 catch (error) {
-    report.error = ['RELEASE_NODE_VERSION_UNSUPPORTED', 'RUN_RELEASE_CHECK_THROUGH_NPM', 'RELEASE_LOCAL_CHECK_FAILED', 'RELEASE_INPUT_CHANGED_DURING_CHECK', 'DOCUMENT_MANIFEST_MISMATCH', 'RELEASE_SYMLINK_REJECTED', 'RELEASE_INPUT_MISSING'].includes(error.message) ? error.message : 'RELEASE_PREPARATION_FAILED';
+    report.error = /^(?:RELEASE_[A-Z_]+|DOCUMENT_[A-Z_]+|UNSAFE_[A-Z_]+|UNEXPECTED_RELEASE_PAYLOAD|INVALID_RELEASE_[A-Z_]+|RUN_RELEASE_CHECK_THROUGH_NPM)$/.test(error.message) ? error.message : error.code==='ENOENT'?'RELEASE_INPUT_MISSING':'RELEASE_PREPARATION_FAILED';
     process.exitCode = 1;
 }
 writeFileSync(output, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
 console.log(`Local validation: ${report.localValidation}. Production readiness: NOT VERIFIED. Report: data/releases/check.json`);
+if(report.error)console.error('Release check error code: '+report.error);
 if (report.localValidation === 'PASS' && args.includes('--require-ready')) {
     console.log('Required real-world acceptance is still pending; refusing readiness success.');
     process.exitCode = 2;

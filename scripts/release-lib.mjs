@@ -57,10 +57,21 @@ export function verifyDocuments(root) {
             fail('RELEASE_SYMLINK_REJECTED');
         inside(root, file);
         const bytes = readFileSync(file);
+        if(bytes.includes(Buffer.from('\r\n')))fail('DOCUMENT_EOL_MISMATCH');
         if (bytes.length !== expected.bytes || sha256(bytes) !== expected.sha256)
             fail('DOCUMENT_MANIFEST_MISMATCH');
     }
     return Object.keys(manifest).length;
+}
+export function refreshDocumentManifest(root){
+    const file=join(root,'MANIFEST.json'),manifest=JSON.parse(readFileSync(file,'utf8')),updates=[];
+    for(const path of Object.keys(manifest)){
+        safePath(path);if(path!=='README.md'&&!(path.startsWith('docs/')&&path.endsWith('.md')))fail('DOCUMENT_ENTRY_TYPE_REJECTED');
+        const target=join(root,path);if(lstatSync(target).isSymbolicLink())fail('RELEASE_SYMLINK_REJECTED');inside(root,target);
+        const bytes=Buffer.from(readFileSync(target,'utf8').replace(/\r\n/g,'\n'),'utf8');updates.push({target,bytes});manifest[path]={bytes:bytes.length,sha256:sha256(bytes)};
+    }
+    for(const update of updates)writeFileSync(update.target,update.bytes);
+    writeFileSync(file,JSON.stringify(manifest,null,2)+'\n');return updates.length;
 }
 export function cleanBuildOutputs(root) {
     root = realpathSync(root);

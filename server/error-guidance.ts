@@ -1,4 +1,7 @@
 export function errorGuidance(code:string) {
+  if(/DISCOVERY_COST_CONFIRMATION/.test(code))return {category:'COST_CONFIRMATION',message:'请先明确确认模型费用。',nextAction:'开启评估会作用于后续手动与定时发现；确认后再保存，或保持关闭使用规则候选。'};
+  if(/DISCOVERY_PROFILE_REQUIRED|INVALID_DISCOVERY_PROFILE|DISCOVERY_HARD_LIMIT/.test(code))return {category:'PROFILE',message:'画像尚未保存或字段不符合边界。',nextAction:'填写至少一种语言，检查 Star 范围和资源限额，保存后再发现。'};
+  if(/SOURCE_|CANDIDATE_EXCLUDED/.test(code))return {category:'SOURCE_RECHECK',message:'来源需要重新复核，或已被关闭、忽略或排除。',nextAction:'打开机会发现中的候选，重新复核并核对风险；关闭来源不能开始付费分析。'};
   const match=(pattern:RegExp)=>pattern.test(code);
   if(match(/NOT_CONFIGURED|INVALID_MODEL_IDENTIFIER|INVALID_SETTINGS/)) return {category:'CONFIGURATION',message:'模型或密钥引用尚不可用。',nextAction:'核对已保存的模型和服务端环境变量，修改环境变量后重启服务。'};
   if(match(/REVISION|CONFLICT|BUSY|ALREADY_ACTIVE|NOT_READY/)) return {category:'CONFLICT',message:'配置或执行状态已变化。',nextAction:'刷新当前配置；已有业务任务完成后，再主动发起测试。'};

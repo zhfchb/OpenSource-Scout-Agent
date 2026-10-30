@@ -1,5 +1,5 @@
 import { availableParallelism, freemem, totalmem, platform } from 'node:os';
-type Phase = 'idle' | 'source' | 'analysis' | 'patch';
+type Phase = 'idle' | 'source' | 'analysis' | 'patch' | 'discovery' | 'recheck' | 'evaluation';
 export class RuntimeMetrics {
   private phase: Phase = 'idle';
   private phases: Partial<Record<Phase, { samples: number; peakRssBytes: number; minFreeMemoryBytes: number }>> = {};

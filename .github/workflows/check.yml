@@ -1,7 +1,7 @@
-name: M0 checks
+name: v2 local and release checks
 on:
   push:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main, 'feat/**', 'fix/**', 'codex/**']
   pull_request:
 permissions:
   contents: read
@@ -9,12 +9,27 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
+      - run: npm run release:check
+      - run: npm run release:pack
+      - run: npm run release:verify -- data/releases/*.tar.gz
+      - run: npm run release:extract -- data/releases/*.tar.gz data/releases/installed
+      - name: Install production dependencies on the actual Linux runner
+        run: npm ci --omit=dev --prefix data/releases/installed
+      - run: npm run release:smoke -- --installed data/releases/installed
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scout-runtime-candidate
+          path: |
+            data/releases/*.tar.gz
+            data/releases/*.sha256
+            data/releases/check.json
+            data/releases/latest.json
+            data/releases/smoke-*.json
+          if-no-files-found: error
+          retention-days: 7

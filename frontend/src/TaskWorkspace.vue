@@ -39,7 +39,7 @@ async function resolveInput() {
   busy.value = true; notice.value = ''; chosen.value = ''; issues.value = [];
   try {
     if (/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9]\d*\/?$/.test(url.value)) { chosen.value = url.value; notice.value = '已选择 Issue，点击开始分析后获取公开来源。'; }
-    else { const result = await props.api('admin/issues', 'POST', { url: url.value }); issues.value = result.items; notice.value = result.message + (result.items.length ? '' : ' 当前范围没有可选 Issue。'); }
+    else { const result = await props.api('admin/issues', 'POST', { url: url.value }); issues.value = result.items; notice.value = result.message + (result.items.length ? '' : ' 查询成功，但本次范围内没有开放的 Issue（PR 不算 Issue）。可以换一个有开放 Issue 的公开仓库，或直接粘贴具体 Issue 链接；这不代表凭据失效。'); }
     requestKey.value = crypto.randomUUID();
   } catch (e) { notice.value = (e as Error).message; }
   finally { busy.value = false; }

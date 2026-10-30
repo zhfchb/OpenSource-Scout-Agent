@@ -63,7 +63,7 @@ export class ModelClient {
     // Single provider, fixed HTTPS endpoint. Never accept endpoint URLs from tasks.
     const response: any = await this.transport('https://api.deepseek.com/chat/completions', {
       method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: settings.model, messages: [{ role: 'system', content: systemMessage }, { role: 'user', content: JSON.stringify(input) }], response_format: { type: 'json_object' }, max_tokens: outputTokens, stream: false }),
+      body: JSON.stringify({ model: settings.model, messages: [{ role: 'system', content: systemMessage }, { role: 'user', content: JSON.stringify(input) }], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: outputTokens, stream: false }),
     }, outputTokens <= 512 ? 16384 : Math.min(settings.maxArtifactBytes, 200000), outputTokens === 64 ? Math.min(settings.requestTimeoutMs, 30000) : settings.requestTimeoutMs);
     const tokens = response?.usage?.total_tokens;
     usage(Number.isSafeInteger(tokens) && tokens >= 0 ? tokens : null);

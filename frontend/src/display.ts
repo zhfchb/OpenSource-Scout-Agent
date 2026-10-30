@@ -18,6 +18,10 @@ const labels: Record<string, string> = {
   SERVICE_STOPPED: '服务已停止', SCHEDULE_CHANGED: '定时设置已更新',
   SOURCE_RECHECK: '来源复核', EVALUATION_CANCELLED: '评估已取消',
   SNAPSHOT: '读取来源', CONTEXT: '整理上下文', MODEL: '模型分析',
+  source: '读取来源', analysis: '模型分析',
+  MODEL_PROVIDER_UNAVAILABLE: '模型服务返回异常', MODEL_PROVIDER_ERROR: '模型服务内部错误',
+  MODEL_PROVIDER_GATEWAY_ERROR: '模型网关异常', MODEL_PROVIDER_OVERLOADED: '模型服务繁忙',
+  MODEL_PROVIDER_GATEWAY_TIMEOUT: '模型网关超时',
 };
 
 export function display(value: string | null | undefined): string {

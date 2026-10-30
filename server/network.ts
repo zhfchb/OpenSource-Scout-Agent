@@ -18,7 +18,7 @@ export const boundedJson: Transport = async (url, init, maxBytes, timeoutMs, obs
   if (!response.ok) {
     await response.body?.cancel();
     if(parsed.hostname==='api.deepseek.com') {
-      const codes:Record<number,string>={400:'MODEL_REQUEST_REJECTED',401:'MODEL_AUTH_FAILED',402:'MODEL_CREDIT_REJECTED',403:'MODEL_PERMISSION_REJECTED',404:'MODEL_UNAVAILABLE',422:'MODEL_REQUEST_REJECTED',429:'MODEL_RATE_LIMITED'};
+      const codes:Record<number,string>={400:'MODEL_REQUEST_REJECTED',401:'MODEL_AUTH_FAILED',402:'MODEL_CREDIT_REJECTED',403:'MODEL_PERMISSION_REJECTED',404:'MODEL_UNAVAILABLE',422:'MODEL_REQUEST_REJECTED',429:'MODEL_RATE_LIMITED',500:'MODEL_PROVIDER_ERROR',502:'MODEL_PROVIDER_GATEWAY_ERROR',503:'MODEL_PROVIDER_OVERLOADED',504:'MODEL_PROVIDER_GATEWAY_TIMEOUT'};
       throw new DomainError(codes[response.status]||'MODEL_PROVIDER_UNAVAILABLE',502);
     }
     throw new DomainError(response.status === 429 || response.status === 403 ? 'REMOTE_RATE_OR_PERMISSION' : response.status === 404 ? 'REMOTE_NOT_FOUND' : 'REMOTE_REQUEST_FAILED', 502);

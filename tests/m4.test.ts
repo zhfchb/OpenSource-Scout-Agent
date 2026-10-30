@@ -118,7 +118,7 @@ test('backup restores model-test tables and persistent UTC guard; source stays u
 });
 test('DeepSeek status classification consumes no raw provider body',async()=>{
   const original=globalThis.fetch;
-  try{for(const [status,code] of [[401,'MODEL_AUTH_FAILED'],[402,'MODEL_CREDIT_REJECTED'],[429,'MODEL_RATE_LIMITED'],[503,'MODEL_PROVIDER_UNAVAILABLE']] as const){globalThis.fetch=async()=>new Response('private-secret',{status});await assert.rejects(boundedJson('https://api.deepseek.com/chat/completions',{},1000,1000),new RegExp(code));}}
+  try{for(const [status,code] of [[401,'MODEL_AUTH_FAILED'],[402,'MODEL_CREDIT_REJECTED'],[429,'MODEL_RATE_LIMITED'],[500,'MODEL_PROVIDER_ERROR'],[502,'MODEL_PROVIDER_GATEWAY_ERROR'],[503,'MODEL_PROVIDER_OVERLOADED'],[504,'MODEL_PROVIDER_GATEWAY_TIMEOUT']] as const){globalThis.fetch=async()=>new Response('private-secret',{status});await assert.rejects(boundedJson('https://api.deepseek.com/chat/completions',{},1000,1000),new RegExp(code));}}
   finally{globalThis.fetch=original;}
 });
 test('old pre-M4 backup migrates only target and recovery guard survives restart then expires at UTC midnight',async()=>{

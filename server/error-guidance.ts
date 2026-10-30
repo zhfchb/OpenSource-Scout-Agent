@@ -1,4 +1,5 @@
 export function errorGuidance(code:string) {
+  if (code.startsWith('MODEL_PROVIDER_')) return {category:'PROVIDER',message:code==='MODEL_PROVIDER_OVERLOADED'?'模型供应商当前负载过高。':code==='MODEL_PROVIDER_ERROR'?'模型供应商返回服务内部错误。':code==='MODEL_PROVIDER_GATEWAY_TIMEOUT'?'模型供应商网关等待超时。':code==='MODEL_PROVIDER_GATEWAY_ERROR'?'模型供应商网关返回异常。':'模型供应商返回异常响应，未获得完整分析。',nextAction:'已有来源文件已保留。稍后可手动重试当前步骤；这会再次调用模型，可能计费。用量未知不代表未扣费。'};
   if(code==='SOURCE_NEW_SELECTION_REQUIRED')return {category:'SOURCE_RECHECK',message:'原任务已经保存分析，不能覆盖已有结果。',nextAction:'打开关联任务查看；如需使用新配置重新分析，请确认新费用后新建选择。'};
   if(/DISCOVERY_COST_CONFIRMATION/.test(code))return {category:'COST_CONFIRMATION',message:'请先明确确认模型费用。',nextAction:'开启评估会作用于后续手动与定时发现；确认后再保存，或保持关闭使用规则候选。'};
   if(/DISCOVERY_PROFILE_REQUIRED|INVALID_DISCOVERY_PROFILE|DISCOVERY_HARD_LIMIT/.test(code))return {category:'PROFILE',message:'画像尚未保存或字段不符合边界。',nextAction:'填写至少一种语言，检查 Star 范围和资源限额，保存后再发现。'};

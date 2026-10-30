@@ -4,6 +4,7 @@ export class ExecutionSlot {
   private owner?: symbol;
   private listeners = new Set<() => void>();
   get busy() { return Boolean(this.owner); }
+  wake() {setImmediate(() => {for(const listener of this.listeners)listener();});}
   acquire() {
     if (this.owner) return undefined;
     const token = Symbol(); this.owner = token;

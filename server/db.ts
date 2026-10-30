@@ -32,6 +32,11 @@ export function openDatabase(path: string, recover = true, limits: StorageLimits
       }
       db.prepare('INSERT OR IGNORE INTO settings(id, value) VALUES (1, ?)').run(JSON.stringify(defaults));
       if (recover) {
+        db.prepare("UPDATE discovery_runs SET status='INTERRUPTED',attempt=attempt+1,reason='SERVICE_RESTARTED',finished_at=? WHERE status IN ('QUEUED','RUNNING')").run(Date.now());
+        db.prepare("UPDATE execution_queue SET state='INTERRUPTED' WHERE state IN ('QUEUED','RUNNING')").run();
+        db.prepare("UPDATE source_rechecks SET status='UNKNOWN',error_code='SERVICE_RESTARTED' WHERE status IN ('QUEUED','RUNNING')").run();
+        db.prepare("UPDATE candidate_analysis_links SET status='WAITING_SOURCE_CONFIRMATION' WHERE status IN ('QUEUED','RUNNING')").run();
+        db.prepare("UPDATE discovery_evaluations SET status='INTERRUPTED',usage_state=CASE WHEN usage_state='RESERVED' THEN 'UNKNOWN' ELSE usage_state END WHERE status='RUNNING'").run();
         db.prepare("UPDATE model_tests SET status='INTERRUPTED', finished_at=?, usage_state=CASE WHEN usage_state='RESERVED' THEN 'UNKNOWN' ELSE usage_state END WHERE status='RUNNING'").run(Date.now());
         db.prepare("UPDATE tasks SET status = 'INTERRUPTED', updated_at = CURRENT_TIMESTAMP WHERE status IN ('RUNNING','QUEUED')").run();
         db.prepare("UPDATE usage SET state = 'UNKNOWN' WHERE state = 'RESERVED'").run();

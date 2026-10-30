@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 export type Settings = typeof defaults;
 export type Target = { repo: string; issue?: number };
 export interface Snapshot {
+  sourceIdentity?:{repoId:number;issueId:number;updatedAt:string;bodyHash:string;titleHash:string;assignees:string[]};
   repo: string; issue: { number: number; title: string; body: string; url: string };
   commit: string; files: { path: string; content: string; url: string }[];
   gaps: string[]; capturedAt: string;
@@ -82,6 +83,8 @@ export class GithubClient {
     }
     if (candidates.length > files.length) gaps.push('受文件数/字节限制，未读取全部候选文件。');
     if (!files.length) gaps.push('未获得可分析源码，结论只能基于 Issue。');
-    return { repo: target.repo, issue: { number: target.issue, title, body: body.slice(0, 12000), url: `https://github.com/${target.repo}/issues/${target.issue}` }, commit: commit.sha, files, gaps, capturedAt: new Date().toISOString() };
+    const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    const sourceIdentity=Number.isSafeInteger(repo.id)&&Number.isSafeInteger(issue.id)?{repoId:repo.id,issueId:issue.id,updatedAt:issue.updated_at,bodyHash:hash(body),titleHash:hash(issue.title),assignees:Array.isArray(issue.assignees)?issue.assignees.map((x:any)=>x.login).sort():[]}:undefined;
+    return { sourceIdentity,repo: target.repo, issue: { number: target.issue, title, body: body.slice(0, 12000), url: `https://github.com/${target.repo}/issues/${target.issue}` }, commit: commit.sha, files, gaps, capturedAt: new Date().toISOString() };
   }
 }

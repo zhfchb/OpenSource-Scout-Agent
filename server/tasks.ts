@@ -11,9 +11,11 @@ import { StorageGuard, type StorageLimits } from './storage.js';
 import type { RuntimeMetrics } from './metrics.js';
 import { executionSlot } from './execution-slot.js';
 import { errorGuidance } from './error-guidance.js';
+import {enqueue,queueHead,queueCount,finishWork,cancelQueued} from './work-queue.js';
+import type {Transport} from './network.js';
 
 interface Task { id: string; repo: string; issue_number: number; status: string; phase: string; data_source: string; attempt: number; config_snapshot: string; snapshot: string | null; analysis: string | null; request_key: string | null }
-export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE'; limits?: StorageLimits; metrics?: RuntimeMetrics };
+export type TaskDependencies = { github?: GithubClient; model?: ModelClient; source?: 'LIVE_API' | 'FIXTURE'; limits?: StorageLimits; metrics?: RuntimeMetrics; discoveryTransport?:Transport; sourceGate?:(taskId:string,signal:AbortSignal,snapshot?:Snapshot)=>Promise<boolean> };
 export class TaskService {
   readonly review: ReviewService;
   private guard: StorageGuard;
@@ -25,6 +27,8 @@ export class TaskService {
   constructor(private db: Database.Database, private deps: TaskDependencies = {}) { this.github = deps.github || new GithubClient(); this.model = deps.model || new ModelClient(); this.review = new ReviewService(db, deps.limits); this.guard = new StorageGuard(db, deps.limits); this.unsubscribe = executionSlot(db).subscribe(() => this.kick()); }
   settings(): Settings { return { ...defaults, ...JSON.parse((this.db.prepare('SELECT value FROM settings WHERE id = 1').get() as { value: string }).value) }; }
   ready() { return this.model.available(this.settings()); }
+  setSourceGate(gate:NonNullable<TaskDependencies['sourceGate']>){this.deps.sourceGate=gate;}
+  resumeSource(id:string){const task=this.get(id);if(task.phase!=='ANALYSIS'||task.status!=='WAITING_CONFIRMATION'||!(task as any).source_selection_id)throw new DomainError('SOURCE_RECHECK_REQUIRED',409);if(!this.model.available(JSON.parse(task.config_snapshot)))throw new DomainError('MODEL_NOT_CONFIGURED');if(queueCount(this.db)>=10)throw new DomainError('QUEUE_LIMIT_REACHED',409);this.db.prepare("UPDATE tasks SET status='QUEUED',attempt=attempt+1,source_gate_status=NULL,snapshot=NULL,analysis=NULL WHERE id=?").run(id);this.kick();}
   async issues(url: string) { const release = executionSlot(this.db).acquire(); if (!release) throw new DomainError('EXECUTION_BUSY', 409); try { return await this.github.listIssues(url, this.settings(), new AbortController().signal); } finally { release(); } }
   list() { return this.db.prepare('SELECT id, repo, issue_number, base_sha, status, phase, current_step, attempt, error_code, created_at, updated_at FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT 50').all(); }
   detail(id: string) {
@@ -54,7 +58,7 @@ export class TaskService {
     const settings = this.settings();
     try { assertSettings(settings); } catch { throw new DomainError('INVALID_SETTINGS'); }
     if (!this.model.available(settings)) throw new DomainError('MODEL_NOT_CONFIGURED');
-    if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
+    if (queueCount(this.db) >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
     const id = randomUUID();
     this.db.prepare("INSERT INTO tasks(id, repo, issue_number, status, config_snapshot, request_key, data_source) VALUES (?, ?, ?, 'QUEUED', ?, ?, ?)").run(id, target.repo, target.issue, JSON.stringify(settings), key, this.deps.source || 'LIVE_API');
     this.db.prepare('UPDATE tasks SET settings_revision=(SELECT revision FROM settings WHERE id=1) WHERE id=?').run(id);
@@ -65,6 +69,7 @@ export class TaskService {
     if (!['QUEUED', 'RUNNING'].includes(task.status)) throw new DomainError('TASK_NOT_ACTIVE', 409);
     this.db.prepare("UPDATE tasks SET status = 'CANCELLED', attempt = attempt + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('QUEUED','RUNNING')").run(id);
     if (this.running?.id === id) this.running.controller.abort();
+    cancelQueued(this.db,'TASK',id);
     return { ok: true };
   }
   retry(id: string, expectedAttempt: number) {
@@ -72,7 +77,7 @@ export class TaskService {
     if (task.phase === 'PATCH') throw new DomainError('PATCH_REQUIRES_NEW_PLAN', 409);
     if (task.attempt !== expectedAttempt || !['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(task.status)) throw new DomainError('RETRY_CONFLICT', 409);
     if (this.db.prepare("SELECT 1 FROM tasks WHERE repo = ? AND issue_number = ? AND id != ? AND status IN ('QUEUED','RUNNING')").get(task.repo, task.issue_number, id)) throw new DomainError('TASK_ALREADY_ACTIVE', 409);
-    if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
+    if (queueCount(this.db) >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
     try { assertSettings(JSON.parse(task.config_snapshot)); } catch { throw new DomainError('INVALID_SETTINGS'); }
     if (!this.model.available(JSON.parse(task.config_snapshot))) throw new DomainError('MODEL_NOT_CONFIGURED');
     this.db.prepare("UPDATE tasks SET status = 'QUEUED', attempt = attempt + 1, error_code = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ?").run(id, expectedAttempt);
@@ -85,7 +90,7 @@ export class TaskService {
       if (plan.requested_at) return { id, duplicate: true };
       if (task.status !== 'WAITING_CONFIRMATION') throw new DomainError('PATCH_TASK_NOT_READY', 409);
       if (this.db.prepare("SELECT 1 FROM tasks WHERE repo = ? AND issue_number = ? AND id != ? AND status IN ('QUEUED','RUNNING')").get(task.repo, task.issue_number, id)) throw new DomainError('TASK_ALREADY_ACTIVE', 409);
-      if ((this.db.prepare("SELECT count(*) AS n FROM tasks WHERE status = 'QUEUED'").get() as { n: number }).n >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
+      if (queueCount(this.db) >= 10) throw new DomainError('QUEUE_LIMIT_REACHED', 409);
       const settings = JSON.parse(task.config_snapshot);
       try { assertSettings(settings); } catch { throw new DomainError('INVALID_SETTINGS'); }
       if (!this.model.available(settings)) throw new DomainError('MODEL_NOT_CONFIGURED');
@@ -102,18 +107,22 @@ export class TaskService {
     this.db.prepare('UPDATE tasks SET current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND attempt = ?').run(name, task.id, task.attempt);
   }
   private kick() {
-    if (this.pumping || this.closed) return;
+    if (this.closed) return;
+    for(const row of this.db.prepare("SELECT id,attempt FROM tasks WHERE status='QUEUED' ORDER BY created_at,rowid").all() as {id:string;attempt:number}[])enqueue(this.db,'TASK',row.id,row.attempt);
+    if(this.pumping)return;
     this.pumping = Promise.resolve().then(() => this.pump()).finally(() => { this.pumping = undefined; });
   }
   async idle() { await this.pumping; }
   private async pump() {
     while (!this.closed) {
-      const task = this.db.prepare("SELECT * FROM tasks WHERE status = 'QUEUED' ORDER BY created_at, rowid LIMIT 1").get() as Task | undefined;
-      if (!task) break;
+      const head=queueHead(this.db);if(!head||head.kind!=='TASK')break;
+      const task = this.db.prepare("SELECT * FROM tasks WHERE id=? AND status='QUEUED' AND attempt=?").get(head.entity_id,head.attempt) as Task | undefined;
+      if(!task){finishWork(this.db,'TASK',head.entity_id,head.attempt);continue;}
       const release = executionSlot(this.db).acquire();
       if (!release) break;
       const claim = this.db.prepare("UPDATE tasks SET status = 'RUNNING', current_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QUEUED'").run(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source', task.id);
       if (!claim.changes) { release(); continue; }
+      this.db.prepare("UPDATE execution_queue SET state='RUNNING' WHERE seq=?").run(head.seq);
       const controller = new AbortController(); this.running = { id: task.id, controller };
       this.deps.metrics?.mark(task.phase === 'PATCH' ? 'patch' : task.snapshot ? 'analysis' : 'source');
       try { await this.run(task, controller.signal); }
@@ -125,11 +134,12 @@ export class TaskService {
           const step = (this.db.prepare('SELECT current_step FROM tasks WHERE id = ?').get(task.id) as { current_step: string }).current_step;
           this.db.prepare("INSERT INTO task_steps(task_id, attempt, step, status, summary) VALUES (?, ?, ?, 'FAILED', ?)").run(task.id, task.attempt, step, code);
         }
-      } finally { this.running = undefined; this.deps.metrics?.mark('idle'); release(); }
+      } finally { finishWork(this.db,'TASK',task.id,task.attempt);this.running = undefined; this.deps.metrics?.mark('idle'); release(); }
     }
   }
   private async run(task: Task, signal: AbortSignal) {
     if (task.phase === 'PATCH') return this.runPatch(task, signal);
+    if(this.deps.sourceGate&&!await this.deps.sourceGate(task.id,signal))return;
     const settings: Settings = JSON.parse(task.config_snapshot);
     // Snapshots are immutable across manual retry; no network inside a SQLite transaction.
     let context: Snapshot;
@@ -147,6 +157,7 @@ export class TaskService {
       })();
     }
     if (!this.live(task)) return;
+    if(this.deps.sourceGate&&!await this.deps.sourceGate(task.id,signal,context))return;
     this.db.prepare("UPDATE tasks SET current_step = 'analysis' WHERE id = ? AND attempt = ?").run(task.id, task.attempt);
     this.deps.metrics?.mark('analysis');
     const reserved = prepareContext(context, settings).reservedTokens;

@@ -5,6 +5,7 @@ import PublicReports from './PublicReports.vue';
 import OperationsPanel from './OperationsPanel.vue';
 import ModelDiagnostics from './ModelDiagnostics.vue';
 import DiscoveryWorkspace from './DiscoveryWorkspace.vue';
+import PasswordInput from './PasswordInput.vue';
 const focusTask=ref('');
 function openDiscoveredTask(id:string){focusTask.value=id;page.value='tasks';}
 const view = ref(window.location.hash.startsWith('#/login') ? 'login' : window.location.hash.startsWith('#/workspace') ? 'workspace' : 'public');
@@ -14,7 +15,6 @@ onUnmounted(() => window.removeEventListener('hashchange', routeChanged));
 const enter = () => { window.location.hash = loggedIn.value ? '/workspace' : '/login'; };
 type Settings = { model: string; githubTokenRef: string; modelKeyRef: string; maxFiles: number; maxFileBytes: number; maxSourceBytes: number; maxContextTokens: number; maxCallsPerTask: number; maxTokensPerTask: number; requestTimeoutMs: number; maxArtifactBytes: number };
 const loggedIn = ref(false), ready = ref(false), busy = ref(false), password = ref(''), csrf = ref(''), page = ref('tasks'), message = ref('');
-const showPassword = ref(false);
 const settings = ref<Settings>();
 const taskCount = ref(0), revision = ref(1), saved = ref('');
 const dirty = computed(() => JSON.stringify(settings.value) !== saved.value);
@@ -69,7 +69,7 @@ onMounted(async () => {
   <div v-else-if="!ready" class="loading">正在连接工作台…</div>
   <div v-else-if="!loggedIn" class="login-shell">
     <section class="intro"><div class="brand"><span class="mark">S↗</span> OPEN SOURCE SCOUT</div><div><p class="eyebrow">A THOUGHTFUL WAY TO CONTRIBUTE</p><h1>从一个问题，<br>走向一次贡献。</h1><p class="intro-copy">读懂 Issue，厘清修改计划。<br>让每一份补丁，都经过你的判断。</p></div><small>手动发起 · 人工审核 · GitHub 只读</small></section>
-    <main class="login-form"><p class="eyebrow">OWNER WORKSPACE / 01</p><h2>回到工作台</h2><p class="muted">使用管理员密码访问私有任务与设置。</p><form @submit.prevent="login"><label for="password">管理员密码</label><input id="password" v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" required maxlength="256" autofocus><button type="button" class="password-toggle" aria-controls="password" :aria-pressed="showPassword" @click="showPassword = !showPassword">{{ showPassword ? '隐藏密码' : '显示密码' }}</button><button :disabled="busy" class="primary">{{ busy ? '验证中…' : '进入工作台 →' }}</button></form><p v-if="message" role="alert" class="notice">{{ message }}</p><p><a href="#/reports" class="back-link">← 浏览公开报告</a></p><div class="login-foot"><span class="dot"></span>M5 · 机会发现与私有工作台<br><small>公开来源分析 · 人工审查 · 不执行目标代码</small></div></main>
+    <main class="login-form"><p class="eyebrow">OWNER WORKSPACE / 01</p><h2>回到工作台</h2><p class="muted">使用管理员密码访问私有任务与设置。</p><form @submit.prevent="login"><label for="password">管理员密码</label><PasswordInput v-model="password" /><button :disabled="busy" class="primary">{{ busy ? '验证中…' : '进入工作台 →' }}</button></form><p v-if="message" role="alert" class="notice">{{ message }}</p><p><a href="#/reports" class="back-link">← 浏览公开报告</a></p><div class="login-foot"><span class="dot"></span>M5 · 机会发现与私有工作台<br><small>公开来源分析 · 人工审查 · 不执行目标代码</small></div></main>
   </div>
   <div v-else class="workspace">
     <aside><div class="brand"><span class="mark">S↗</span><span>SCOUT<small>开源贡献工作台</small></span></div><p class="nav-label">WORKSPACE</p><nav aria-label="主导航"><button :class="{ active: page === 'discovery' }" @click="page = 'discovery'; message = ''"><span>⌕</span>机会发现</button><button :class="{ active: page === 'tasks' }" @click="page = 'tasks'; message = ''"><span>▤</span>任务工作区 <span class="nav-count">{{ taskCount }}</span></button><button :class="{ active: page === 'settings' }" @click="page = 'settings'; message = ''"><span>⚙</span>设置与限额</button></nav><div class="aside-bottom"><span class="phase">M5 / CONTRIBUTION DISCOVERY</span><p>一步一步，<br>让贡献有据可循。</p><button class="logout" @click="logout">退出登录 ↗</button></div></aside>

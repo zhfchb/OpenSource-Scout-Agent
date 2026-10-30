@@ -1,5 +1,7 @@
 # OpenSource Scout Agent
 
+已增加 [账号注册与独立工作台](docs/账号与独立工作台.md)：每人独立任务和配置，自行保存模型密钥。原管理员通过旧密码入口绑定用户名，历史数据保留。多账号备份必须同时包含账号库、主密钥和各工作台数据库，原单库备份不足以覆盖全部用户。
+
 面向个人的开源贡献机会发现与辅助工作台。当前为 **v2 / M0–M5 本地已实施；真实模型、定时成功结果与云端验收待补**，以 [当前路线图](docs/开发路线图.md) 为准。公开报告与运维工具已实现；真实模型闭环、Linux/HTTPS 和 2核2GB 容量验收仍待有效凭据和服务器环境，不代表已上线或通过云端验收。
 
 Vue 3 + TypeScript + Fastify + SQLite，一个 Node 进程提供构建后的页面和 API。用户通过浏览器访问云端服务。
@@ -52,7 +54,7 @@ printf '%s' "$scout_password" | node scripts/hash-password.mjs
 unset scout_password
 ```
 
-PowerShell 可用 `Read-Host -MaskInput` 接收密码，再通过管道传给脚本；不要在命令中写真实密码。hash 在环境文件中用单引号包围。生产模式必须 HTTPS；只允许匹配 APP_ORIGIN 的 Origin 进行变更。会话有效期 1–24 小时，默认 12 小时，最多保留 20 个会话。修改管理员 hash 后应停止服务并清空 sessions 表，再重启。
+PowerShell 可用 `Read-Host -MaskInput` 接收密码，再通过管道传给脚本；不要在命令中写真实密码。hash 在环境文件中用单引号包围。生产模式必须 HTTPS；只允许匹配 APP_ORIGIN 的 Origin 进行变更。会话有效期 1–24 小时，默认 12 小时，每用户最多保留 20 个会话。ADMIN_PASSWORD_HASH 只用于首次建立原管理员账号；后续请在页面修改密码，修改后撤销该账号全部会话。
 
 ## Git 约定
 

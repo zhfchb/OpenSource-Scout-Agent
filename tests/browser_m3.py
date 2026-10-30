@@ -76,7 +76,7 @@ with sync_playwright() as p:
     page.get_by_role('button', name='清理过期会话与发布预览').click()
     page.get_by_text('没有删除任务、审核包或公开历史', exact=False).wait_for()
     page.get_by_role('button', name='退出登录').click()
-    page.get_by_role('heading', name='回到工作台').wait_for()
+    page.get_by_role('heading', name='欢迎回来').wait_for()
     assert errors == [], errors
     owner.close()
     visitor.close()

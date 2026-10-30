@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 const value = defineModel<string>({ required: true });
+const props = withDefaults(defineProps<{id?:string;autocomplete?:string;minLength?:number;autofocus?:boolean}>(),{id:'password',autocomplete:'current-password',minLength:1,autofocus:true});
 const visible = ref(false);
 const hide = () => { visible.value = false; };
 function reveal(event: PointerEvent) {
@@ -24,8 +25,8 @@ onUnmounted(() => {
 
 <template>
   <div class="password-field">
-    <input id="password" v-model="value" :type="visible ? 'text' : 'password'" autocomplete="current-password" required maxlength="256" autofocus>
-    <button type="button" class="password-eye" aria-label="按住显示密码" title="按住显示密码，松开隐藏" aria-controls="password" :aria-pressed="visible"
+    <input :id="props.id" v-model="value" :type="visible ? 'text' : 'password'" :autocomplete="props.autocomplete" required :minlength="props.minLength" maxlength="256" :autofocus="props.autofocus">
+    <button type="button" class="password-eye" aria-label="按住显示密码" title="按住显示密码，松开隐藏" :aria-controls="props.id" :aria-pressed="visible"
       @pointerdown.prevent="reveal" @pointerup="hide" @pointerleave="hide" @pointercancel="hide" @lostpointercapture="hide" @blur="hide" @keydown="keyDown" @keyup="hide" @contextmenu.prevent>
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
         <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />

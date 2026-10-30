@@ -34,7 +34,7 @@ with sync_playwright() as p:
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.screenshot(path=str(out / 'analysis-mobile.png'), full_page=True)
     page.get_by_role('button', name='退出登录').click()
-    page.get_by_role('heading', name='回到工作台').wait_for()
+    page.get_by_role('heading', name='欢迎回来').wait_for()
     assert errors == [], errors
     browser.close()
 print('PASS: fixture task, polling, exact evidence, usage, duplicate click, persisted detail, escaped HTML, mobile, logout')

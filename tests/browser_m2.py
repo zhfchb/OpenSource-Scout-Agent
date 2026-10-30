@@ -75,7 +75,7 @@ with sync_playwright() as p:
     expect(page.get_by_role('link', name='下载审核包 JSON', exact=False)).to_have_count(0)
     assert page.request.get(download_url).status == 409
     page.get_by_role('button', name='退出登录').click()
-    page.get_by_role('heading', name='回到工作台').wait_for()
+    page.get_by_role('heading', name='欢迎回来').wait_for()
     assert page.request.get(download_url).status == 401
     assert errors == [], errors
     browser.close()

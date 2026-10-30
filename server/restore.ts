@@ -13,6 +13,7 @@ try {
   db.transaction(() => {
     const nextUtcDay = (Math.floor(Date.now()/86400000)+1)*86400000;
     db.prepare('UPDATE model_test_guard SET blocked_until_utc=max(blocked_until_utc,?) WHERE id=1').run(nextUtcDay);
+    db.prepare("UPDATE discovery_control SET enabled=0,evaluation_enabled=0,next_due_at=NULL,schedule_revision=schedule_revision+1,last_schedule_reason='RESTORE_DISABLED' WHERE id=1").run();
     db.prepare('DELETE FROM sessions').run();
     if (db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'publication_previews'").get()) db.prepare('DELETE FROM publication_previews').run();
     // Old backups must never silently resurrect reports revoked after the backup.

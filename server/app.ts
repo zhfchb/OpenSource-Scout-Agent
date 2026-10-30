@@ -17,6 +17,11 @@ import { ModelClient } from './model.js';
 import { ModelTestsService } from './model-tests.js';
 import { savedSettings, saveSettings } from './settings.js';
 import { errorGuidance } from './error-guidance.js';
+import {DiscoveryService} from './discovery.js';
+import {discoveryRoutes} from './discovery-routes.js';
+import {GithubClient} from './github.js';
+import {GithubBudget} from './github-budget.js';
+import {randomUUID} from 'node:crypto';
 
 export const logOptions = {
   level: 'info',
@@ -27,12 +32,16 @@ export const logOptions = {
 export async function buildApp(config: Config, db: Database.Database, logger = true, dependencies: TaskDependencies = {}) {
   const limits = dependencies.limits || config.storage;
   const metrics = dependencies.metrics || new RuntimeMetrics(); metrics.start();
-  const tasks = new TaskService(db, { ...dependencies, limits, metrics });
+  const githubBudget=new GithubBudget(db,dependencies.discoveryTransport);
+  const github=dependencies.github||new GithubClient((...args)=>githubBudget.scope('legacy:'+randomUUID(),1,2097152,300,120000,false)(...args));
+  const tasks = new TaskService(db, { ...dependencies, github, limits, metrics });
   const model = dependencies.model || new ModelClient();
+  const discovery=new DiscoveryService(db,tasks,model,dependencies.discoveryTransport,dependencies.source||'LIVE_API',Date.now,limits,process.env,metrics);
+  tasks.setSourceGate((...args)=>discovery.gate(...args));discovery.startScheduler();
   const modelTests = new ModelTestsService(db, model, dependencies.source === 'FIXTURE' ? 'FIXTURE' : 'LIVE',Date.now,process.env,limits);
   const publications = new PublicationService(db, process.env, limits), storage = new StorageGuard(db, limits);
   const app = Fastify({ logger: logger ? logOptions : false, bodyLimit: 16384, trustProxy: false, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
-  app.addHook('preClose', async () => { await tasks.close(); await modelTests.close(); metrics.close(); });
+  app.addHook('preClose', async () => { await discovery.close();await tasks.close(); await modelTests.close(); metrics.close(); });
   await app.register(cookie);
   await app.register(rateLimit, { global: false, max: 5, timeWindow: '1 minute', cache: 1000 });
   app.addHook('onRequest', async (req, reply) => {
@@ -52,7 +61,7 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
   const cookieOptions = { httpOnly: true, secure: config.secureCookie, sameSite: 'strict' as const, path: '/' };
   const sessionFor = (raw: string | undefined) => raw && /^[a-f0-9]{64}$/.test(raw) ? db.prepare('SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ?').get(digest(raw), Date.now()) : undefined;
   app.get('/api/health', async (_req, reply) => {
-    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M4' }; }
+    try { db.prepare('SELECT 1').get(); return { status: 'ok', database: 'ok', phase: 'M5' }; }
     catch { return reply.code(503).send({ status: 'unhealthy', database: 'unavailable' }); }
   });
   app.get<{ Querystring: { page?: string } }>('/api/public/reports', { schema: { querystring: { type: 'object', additionalProperties: false, properties: { page: { type: 'string', pattern: '^[1-9][0-9]{0,2}$' } } } }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async req => publications.list(Number(req.query.page || 1)));
@@ -78,13 +87,14 @@ export async function buildApp(config: Config, db: Database.Database, logger = t
       if (!sessionFor(raw)) return reply.code(401).send({ error: 'AUTHENTICATION_REQUIRED' });
       if (!['GET', 'HEAD'].includes(req.method) && req.headers['x-csrf-token'] !== csrfToken(raw!)) return reply.code(403).send({ error: 'CSRF_REJECTED' });
     });
-    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M4' }));
+    await discoveryRoutes(admin,discovery);
+    admin.get('/session', async req => ({ csrfToken: csrfToken(req.cookies.scout_session!), phase: 'M5' }));
     admin.post('/logout', async (req, reply) => {
       db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(digest(req.cookies.scout_session!));
       reply.clearCookie('scout_session', cookieOptions);
       return { ok: true };
     });
-    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M4' }));
+    admin.get('/tasks', { schema: { querystring: { type: 'object', additionalProperties: false } } }, async () => ({ items: tasks.list(), creationEnabled: tasks.ready(), phase: 'M5' }));
     const urlBody = { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string', minLength: 1, maxLength: 500 } } };
     const taskParams = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[a-f0-9-]{36}$' } } };
     admin.post<{ Body: { url: string } }>('/issues', { schema: { body: urlBody }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async req => tasks.issues(req.body.url));

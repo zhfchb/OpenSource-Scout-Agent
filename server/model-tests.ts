@@ -28,7 +28,7 @@ export class ModelTestsService {
     const {settings,revision}=savedSettings(this.db); let valid=true;
     try {assertSettings(settings);this.model.checkSafeSettings(settings);} catch {valid=false;}
     const refs=this.model.references(settings), reservedTokens=probeReservation(settings);
-    return {revision,bootId:this.bootId,model:valid?settings.model:'',references:refs, checks:{modelPresent:Boolean(settings.model)&&valid, limitsSufficient:reservedTokens<=Math.min(settings.maxContextTokens,settings.maxTokensPerTask,this.limits.dailyTokens)},reservedTokens,budget:this.budget(),busy:executionSlot(this.db).busy||Boolean(this.db.prepare("SELECT 1 FROM tasks WHERE status IN ('QUEUED','RUNNING')").get()), history:(this.db.prepare('SELECT id FROM model_tests ORDER BY started_at DESC,rowid DESC LIMIT 10').all() as {id:string}[]).map(row=>this.read(row.id))};
+    return {revision,bootId:this.bootId,model:valid?settings.model:'',references:refs, checks:{modelPresent:Boolean(settings.model)&&valid, limitsSufficient:reservedTokens<=Math.min(settings.maxContextTokens,settings.maxTokensPerTask,this.limits.dailyTokens)},reservedTokens,budget:this.budget(),busy:executionSlot(this.db).busy||Boolean(this.db.prepare("SELECT 1 FROM execution_queue WHERE state IN ('QUEUED','RUNNING')").get())||Boolean(this.db.prepare("SELECT 1 FROM tasks WHERE status IN ('QUEUED','RUNNING')").get()), history:(this.db.prepare('SELECT id FROM model_tests ORDER BY started_at DESC,rowid DESC LIMIT 10').all() as {id:string}[]).map(row=>this.read(row.id))};
   }
   read(id:string) {
     const row=this.db.prepare('SELECT * FROM model_tests WHERE id=?').get(id) as RecordRow|undefined;
@@ -52,7 +52,7 @@ export class ModelTestsService {
     if(budget.calls>=budget.dailyCalls||budget.tokens+reserved>budget.dailyTokens) throw new DomainError('MODEL_TEST_BUDGET_EXCEEDED',409);
     if((this.db.prepare('SELECT count(*) AS n FROM model_tests').get() as {n:number}).n>=1000) throw new DomainError('MODEL_TEST_STORAGE_LIMIT',409);
     new StorageGuard(this.db,this.storageLimits).writable(4096);
-    if(this.db.prepare("SELECT 1 FROM tasks WHERE status IN ('QUEUED','RUNNING')").get()) throw new DomainError('EXECUTION_BUSY',409);
+    if(this.db.prepare("SELECT 1 FROM tasks WHERE status IN ('QUEUED','RUNNING')").get()||this.db.prepare("SELECT 1 FROM execution_queue WHERE state IN ('QUEUED','RUNNING')").get()) throw new DomainError('EXECUTION_BUSY',409);
     const release=executionSlot(this.db).acquire(); if(!release) throw new DomainError('EXECUTION_BUSY',409);
     const id=randomUUID(), started=this.now(), controller=new AbortController();
     try {

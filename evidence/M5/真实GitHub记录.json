@@ -1,0 +1,509 @@
+[
+  {
+    "label": "development_repeat",
+    "source": "LIVE_API",
+    "startedAt": "2026-10-30T00:44:22.516Z",
+    "finishedAt": null,
+    "profile": {
+      "languages": [
+        "Java"
+      ],
+      "preferredLabels": [
+        "good first issue",
+        "help wanted"
+      ],
+      "requirePreferred": false,
+      "excludedLabels": [],
+      "excludedRepos": [],
+      "repoActiveDays": 180,
+      "issueActiveDays": 90,
+      "filterStars": true,
+      "minStars": 10000,
+      "maxStars": 20000,
+      "requireUnassigned": false,
+      "scheduleEnabled": true,
+      "utcHour": 1,
+      "evaluationEnabled": false,
+      "maxRepos": 3,
+      "maxIssues": 30,
+      "repoPages": 1,
+      "issuePages": 1,
+      "httpAttempts": 15,
+      "dailyHttp": 100,
+      "maxBytes": 8388608,
+      "timeoutMs": 15000,
+      "maxEvaluations": 3,
+      "evaluationTokens": 8000,
+      "dailyModelCalls": 10,
+      "dailyModelTokens": 20000
+    },
+    "manual": [
+      {
+        "id": "d832208d-1a9f-449d-af7f-53f1df618f13",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "BOUNDED_SEARCH_INCOMPLETE",
+        "created_at": 1793321062518,
+        "finished_at": 1793321064698,
+        "counts": {
+          "repos": 3,
+          "issues": 30,
+          "matched": 4,
+          "filtered": 26,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "DISABLED"
+        },
+        "http": {
+          "attempts": 3,
+          "bytes": 427714
+        }
+      },
+      {
+        "id": "2a4b0583-2120-45e7-8a68-518f71d3e65f",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "BOUNDED_SEARCH_INCOMPLETE",
+        "created_at": 1793321064698,
+        "finished_at": 1793321065788,
+        "counts": {
+          "repos": 3,
+          "issues": 30,
+          "matched": 4,
+          "filtered": 26,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "DISABLED"
+        },
+        "http": {
+          "attempts": 3,
+          "bytes": 427714
+        }
+      }
+    ],
+    "scheduled": null,
+    "uniqueCandidates": 4,
+    "candidate": {
+      "issueId": 5273257744,
+      "repoId": 1090311,
+      "url": "https://github.com/elastic/logstash/issues/19466",
+      "title": "[aw] Detection Runs"
+    },
+    "ignoredPersisted": true,
+    "recheck": {
+      "status": "WAITING_SOURCE_CONFIRMATION",
+      "hash": "61d1ee78e2665b191ae05e5e22c5844550cee1c64aa586f8fdf2d6832dc658c2",
+      "checkedAt": 1793321067031,
+      "complete": true,
+      "notice": "本次有界检查未发现开放关联 PR，不能排除重复修复",
+      "prs": [],
+      "remoteState": "open"
+    },
+    "requestCounts": [
+      {
+        "action_id": "discovery:2a4b0583-2120-45e7-8a68-518f71d3e65f",
+        "attempts": 3,
+        "bytes": 427714
+      },
+      {
+        "action_id": "discovery:d832208d-1a9f-449d-af7f-53f1df618f13",
+        "attempts": 3,
+        "bytes": 427714
+      },
+      {
+        "action_id": "recheck:e75fcd4a-49bc-4afc-a531-f93eb31bdf0a",
+        "attempts": 3,
+        "bytes": 63602
+      }
+    ],
+    "cooldowns": [],
+    "modelCalls": "NOT_RUN",
+    "error": null
+  },
+  {
+    "label": "final_build_manual_and_schedule",
+    "source": "LIVE_API",
+    "startedAt": "2026-10-30T00:57:12.120Z",
+    "finishedAt": "2026-10-30T01:00:19.371Z",
+    "profile": {
+      "languages": [
+        "Java"
+      ],
+      "preferredLabels": [
+        "good first issue",
+        "help wanted"
+      ],
+      "requirePreferred": false,
+      "excludedLabels": [],
+      "excludedRepos": [],
+      "repoActiveDays": 180,
+      "issueActiveDays": 90,
+      "filterStars": true,
+      "minStars": 10000,
+      "maxStars": 20000,
+      "requireUnassigned": false,
+      "scheduleEnabled": true,
+      "utcHour": 1,
+      "evaluationEnabled": false,
+      "maxRepos": 3,
+      "maxIssues": 30,
+      "repoPages": 1,
+      "issuePages": 1,
+      "httpAttempts": 15,
+      "dailyHttp": 100,
+      "maxBytes": 8388608,
+      "timeoutMs": 15000,
+      "maxEvaluations": 3,
+      "evaluationTokens": 8000,
+      "dailyModelCalls": 10,
+      "dailyModelTokens": 20000
+    },
+    "manual": [
+      {
+        "id": "2de6391b-770c-4cbd-b643-1922802722c5",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "BOUNDED_SEARCH_INCOMPLETE",
+        "created_at": 1793321832123,
+        "finished_at": 1793321834172,
+        "counts": {
+          "repos": 3,
+          "issues": 30,
+          "matched": 14,
+          "filtered": 16,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "DISABLED"
+        },
+        "http": {
+          "attempts": 3,
+          "bytes": 399061
+        }
+      },
+      {
+        "id": "36cb21a4-7bdb-4775-9031-c86513f12208",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "BOUNDED_SEARCH_INCOMPLETE",
+        "created_at": 1793321834173,
+        "finished_at": 1793321835309,
+        "counts": {
+          "repos": 3,
+          "issues": 30,
+          "matched": 12,
+          "filtered": 18,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "DISABLED"
+        },
+        "http": {
+          "attempts": 3,
+          "bytes": 322993
+        }
+      }
+    ],
+    "scheduled": {
+      "id": "25d51fa1-dbb2-4617-af4a-ad5bdb43f00a",
+      "trigger": "SCHEDULE",
+      "revision": 1,
+      "status": "PARTIAL",
+      "reason": "GITHUB_COOLDOWN",
+      "created_at": 1793322018545,
+      "finished_at": 1793322018722,
+      "counts": {
+        "repos": 0,
+        "issues": 0,
+        "matched": 0,
+        "filtered": 0,
+        "gaps": 0,
+        "evaluated": 0,
+        "evaluationReason": "NOT_RUN"
+      },
+      "http": {
+        "attempts": 1,
+        "bytes": 0
+      }
+    },
+    "uniqueCandidates": 26,
+    "candidate": {
+      "issueId": 3714287557,
+      "repoId": 166515022,
+      "url": "https://github.com/trinodb/trino/issues/27600",
+      "title": "Migrate JDBC tests from testng to JUnit"
+    },
+    "ignoredPersisted": true,
+    "recheck": {
+      "status": "WAITING_SOURCE_CONFIRMATION",
+      "hash": "9aca9af24f6515723091c77aa6340ea5bdb4ab7dea4c59adbae9f7325f830947",
+      "checkedAt": 1793321838523,
+      "complete": false,
+      "notice": "存在开放关联 PR，可能重复",
+      "prs": [
+        {
+          "id": 3259006447,
+          "repo": "trinodb/trino",
+          "number": 28159,
+          "state": "open",
+          "merged": false,
+          "updatedAt": "2026-10-14T11:22:36Z"
+        },
+        {
+          "id": 4300585053,
+          "repo": "trinodb/trino",
+          "number": 30765,
+          "state": "closed",
+          "merged": false,
+          "updatedAt": "2026-08-18T07:49:20Z"
+        }
+      ],
+      "remoteState": "open"
+    },
+    "requestCounts": [
+      {
+        "action_id": "discovery:25d51fa1-dbb2-4617-af4a-ad5bdb43f00a",
+        "attempts": 1,
+        "bytes": 0
+      },
+      {
+        "action_id": "discovery:2de6391b-770c-4cbd-b643-1922802722c5",
+        "attempts": 3,
+        "bytes": 399061
+      },
+      {
+        "action_id": "discovery:36cb21a4-7bdb-4775-9031-c86513f12208",
+        "attempts": 3,
+        "bytes": 322993
+      },
+      {
+        "action_id": "recheck:9a7fe8bf-01b0-44d1-b77b-918f705992cb",
+        "attempts": 6,
+        "bytes": 136821
+      }
+    ],
+    "cooldowns": [
+      {
+        "resource": "search",
+        "not_before": 1793322035000,
+        "reason": "RATE_LIMIT"
+      }
+    ],
+    "modelCalls": "NOT_RUN",
+    "error": null
+  },
+  {
+    "label": "rate_limit_manual",
+    "source": "LIVE_API",
+    "startedAt": "2026-10-30T01:00:12.967Z",
+    "finishedAt": "2026-10-30T01:00:13.207Z",
+    "profile": {
+      "languages": [
+        "Java"
+      ],
+      "preferredLabels": [
+        "good first issue",
+        "help wanted"
+      ],
+      "requirePreferred": false,
+      "excludedLabels": [],
+      "excludedRepos": [],
+      "repoActiveDays": 180,
+      "issueActiveDays": 90,
+      "filterStars": true,
+      "minStars": 10000,
+      "maxStars": 20000,
+      "requireUnassigned": false,
+      "scheduleEnabled": false,
+      "utcHour": 2,
+      "evaluationEnabled": false,
+      "maxRepos": 20,
+      "maxIssues": 30,
+      "repoPages": 1,
+      "issuePages": 1,
+      "httpAttempts": 15,
+      "dailyHttp": 100,
+      "maxBytes": 8388608,
+      "timeoutMs": 15000,
+      "maxEvaluations": 3,
+      "evaluationTokens": 8000,
+      "dailyModelCalls": 10,
+      "dailyModelTokens": 20000
+    },
+    "manual": [
+      {
+        "id": "4bbc96c6-08f2-45b1-9eb9-8ae6755855b9",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "GITHUB_COOLDOWN",
+        "created_at": 1793322012969,
+        "finished_at": 1793322013203,
+        "counts": {
+          "repos": 0,
+          "issues": 0,
+          "matched": 0,
+          "filtered": 0,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "NOT_RUN"
+        },
+        "http": {
+          "attempts": 1,
+          "bytes": 0
+        }
+      },
+      {
+        "id": "dc903e7f-2fa5-47da-8785-928872c8d94b",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "GITHUB_COOLDOWN",
+        "created_at": 1793322013204,
+        "finished_at": 1793322013205,
+        "counts": {
+          "repos": 0,
+          "issues": 0,
+          "matched": 0,
+          "filtered": 0,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "NOT_RUN"
+        },
+        "http": {
+          "attempts": 0,
+          "bytes": 0
+        }
+      }
+    ],
+    "scheduled": null,
+    "uniqueCandidates": 0,
+    "candidate": null,
+    "ignoredPersisted": false,
+    "recheck": null,
+    "requestCounts": [
+      {
+        "action_id": "discovery:4bbc96c6-08f2-45b1-9eb9-8ae6755855b9",
+        "attempts": 1,
+        "bytes": 0
+      }
+    ],
+    "cooldowns": [
+      {
+        "resource": "search",
+        "not_before": 1793322035000,
+        "reason": "RATE_LIMIT"
+      }
+    ],
+    "modelCalls": "NOT_RUN",
+    "error": null
+  },
+  {
+    "label": "rate_limit_manual_after_reset",
+    "source": "LIVE_API",
+    "startedAt": "2026-10-30T01:01:24.458Z",
+    "finishedAt": "2026-10-30T01:01:24.726Z",
+    "profile": {
+      "languages": [
+        "Java"
+      ],
+      "preferredLabels": [
+        "good first issue",
+        "help wanted"
+      ],
+      "requirePreferred": false,
+      "excludedLabels": [],
+      "excludedRepos": [],
+      "repoActiveDays": 180,
+      "issueActiveDays": 90,
+      "filterStars": true,
+      "minStars": 10000,
+      "maxStars": 20000,
+      "requireUnassigned": false,
+      "scheduleEnabled": false,
+      "utcHour": 2,
+      "evaluationEnabled": false,
+      "maxRepos": 20,
+      "maxIssues": 30,
+      "repoPages": 1,
+      "issuePages": 1,
+      "httpAttempts": 15,
+      "dailyHttp": 100,
+      "maxBytes": 8388608,
+      "timeoutMs": 15000,
+      "maxEvaluations": 3,
+      "evaluationTokens": 8000,
+      "dailyModelCalls": 10,
+      "dailyModelTokens": 20000
+    },
+    "manual": [
+      {
+        "id": "54e7a6b0-1a01-4166-8232-1068d8da5f3e",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "GITHUB_COOLDOWN",
+        "created_at": 1793322084461,
+        "finished_at": 1793322084723,
+        "counts": {
+          "repos": 0,
+          "issues": 0,
+          "matched": 0,
+          "filtered": 0,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "NOT_RUN"
+        },
+        "http": {
+          "attempts": 1,
+          "bytes": 0
+        }
+      },
+      {
+        "id": "bdaccd07-dedc-4612-a53b-8c19329832ac",
+        "trigger": "MANUAL",
+        "revision": 1,
+        "status": "PARTIAL",
+        "reason": "GITHUB_COOLDOWN",
+        "created_at": 1793322084724,
+        "finished_at": 1793322084725,
+        "counts": {
+          "repos": 0,
+          "issues": 0,
+          "matched": 0,
+          "filtered": 0,
+          "gaps": 0,
+          "evaluated": 0,
+          "evaluationReason": "NOT_RUN"
+        },
+        "http": {
+          "attempts": 0,
+          "bytes": 0
+        }
+      }
+    ],
+    "scheduled": null,
+    "uniqueCandidates": 0,
+    "candidate": null,
+    "ignoredPersisted": false,
+    "recheck": null,
+    "requestCounts": [
+      {
+        "action_id": "discovery:54e7a6b0-1a01-4166-8232-1068d8da5f3e",
+        "attempts": 1,
+        "bytes": 0
+      }
+    ],
+    "cooldowns": [
+      {
+        "resource": "search",
+        "not_before": 1793322100000,
+        "reason": "RATE_LIMIT"
+      }
+    ],
+    "modelCalls": "NOT_RUN",
+    "error": null
+  }
+]

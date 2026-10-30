@@ -181,6 +181,15 @@ h2 {
   margin:12px 0 22px}
 .login-form button {
   width:100%}
+.advanced-settings summary { cursor: pointer; font-size: 17px; font-weight: 600; color: var(--ink); }
+.advanced-settings[open] summary { margin-bottom: 20px; }
+.advanced-settings .fields { margin-top: 24px; }
+select,textarea { font: inherit; color: var(--ink); border: 1px solid #cbddea; border-radius: 6px; background: #fff; }
+textarea:focus-visible,select:focus-visible,summary:focus-visible { outline: 3px solid #519bd7; outline-offset: 3px; }
+textarea { resize: vertical; }
+button { transition: background-color .15s ease, border-color .15s ease; }
+button:not(:disabled):hover { border-color: #7eb4dc; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
 .login-foot {
   margin-top:50px;
   color:#607e98;

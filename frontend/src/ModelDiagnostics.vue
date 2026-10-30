@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { display } from './display';
 import {ref,onMounted,onUnmounted,watch} from 'vue';
 const props=defineProps<{api:(path:string,method?:string,body?:unknown)=>Promise<any>;revision:number;dirty:boolean}>();
 const data=ref<any>(), message=ref(''),pending=ref(false),acknowledge=ref(false);
@@ -21,7 +22,7 @@ const date=(value:number)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asi
 </script>
 <template>
   <section class="panel diagnostics" aria-label="模型配置诊断">
-    <p class="eyebrow">CONNECTION / 本地检查与主动测试</p><h2>03 / 当前保存配置</h2>
+    <p class="eyebrow">连接状态</p><h2>模型诊断</h2>
     <template v-if="data">
       <p class="muted">配置版本 {{data.revision}} · 本地检查不联网，不消耗模型额度。</p>
       <div class="diagnostic-grid"><p>模型标识 <strong>{{data.model||'未配置'}}</strong></p><p>模型凭据 <strong>{{data.references.modelKeyPresent?'已配置':'未配置'}}</strong></p><p>GitHub 凭据 <strong>{{data.references.githubTokenPresent?'已配置':'未配置，可匿名读取公开仓库'}}</strong></p><p>最小请求预算 <strong>{{data.checks.limitsSufficient?'足够':'不足'}}</strong></p></div>
@@ -30,10 +31,10 @@ const date=(value:number)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asi
       <p class="muted">每日额度重置：{{date(data.budget.resetAt)}}；最短间隔 {{data.budget.intervalMs/1000}} 秒。</p>
       <p v-if="data.budget.blockedUntilUtc>Date.now()" class="notice">数据库已恢复，至 {{date(data.budget.blockedUntilUtc)}} 暂停新测试。费用以供应商账单为准。</p>
       <label class="cost-consent"><input v-model="acknowledge" type="checkbox" :disabled="dirty||pending">我理解：将发起一次真实模型请求，可能计费。</label>
-      <div class="diagnostic-actions"><button type="button" class="primary" :disabled="pending||dirty||!acknowledge||data.busy||!data.checks.modelPresent||!data.references.modelKeyPresent||!data.checks.limitsSufficient" @click="test">{{pending?'提交中…':'主动连接测试'}}</button><button type="button" @click="refresh">刷新本地检查</button></div>
-      <p v-if="data.busy" class="muted">执行槽或业务队列占用中；不会排队等待后自动发起测试。</p>
-      <p role="alert" class="notice">{{message}}</p>
-      <ol class="probe-history"><li v-for="row in data.history" :key="row.id"><strong>{{row.data_source}} · {{row.status}}</strong><span>配置 v{{row.settings_revision}} · {{date(row.started_at)}}</span><span>{{row.current&&!dirty?'本次服务配置下最近测试成功':'历史或未成功结果'}} · {{row.durationMs===null?'进行中':row.durationMs+' ms'}} · 用量 {{row.usage_state==='KNOWN'?row.actual_tokens:'未知（保留预留 '+row.reserved_tokens+'）'}}</span><p v-if="row.guidance">{{row.guidance.message}} {{row.guidance.nextAction}}</p><code v-if="row.error_code">{{row.error_code}} · {{row.request_id}}</code><button v-if="row.status==='RUNNING'" type="button" @click="cancel(row)">取消此次测试</button></li></ol>
+      <div class="diagnostic-actions"><button type="button" class="primary" :disabled="pending||dirty||!acknowledge||data.busy||!data.checks.modelPresent||!data.references.modelKeyPresent||!data.checks.limitsSufficient" @click="test">{{pending?'提交中…':'主动连接测试'}}</button><button type="button" @click="refresh">刷新状态</button></div>
+      <p v-if="data.busy" class="muted">正在处理其他任务，请完成后再测试连接。</p>
+      <p v-if="message" role="alert" class="notice">{{message}}</p>
+      <ol class="probe-history"><li v-for="row in data.history" :key="row.id"><strong>{{display(row.data_source)}} · {{display(row.status)}}</strong><span>配置 v{{row.settings_revision}} · {{date(row.started_at)}}</span><span>{{row.current&&!dirty?'本次服务配置下最近测试成功':'历史测试记录'}} · {{row.durationMs===null?'进行中':row.durationMs+' ms'}} · 用量 {{row.usage_state==='KNOWN'?row.actual_tokens:'未知（保留预留 '+row.reserved_tokens+'）'}}</span><p v-if="row.guidance">{{row.guidance.message}} {{row.guidance.nextAction}}</p><code v-if="row.error_code">{{row.error_code}} · {{row.request_id}}</code><button v-if="row.status==='RUNNING'" type="button" @click="cancel(row)">取消此次测试</button></li></ol>
       <p class="muted">成功仅代表此次连接和最小 JSON 校验通过，不证明分析准确或补丁可用。测试不会发送 Issue 或源码；取消后仍可能计费。旧任务保留原配置快照。</p>
     </template>
   </section>

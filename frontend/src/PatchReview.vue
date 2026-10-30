@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { display } from './display';
 import { computed, ref, watch } from 'vue';
 import type { ReviewState } from './review-types';
 const props = defineProps<{
@@ -44,7 +45,7 @@ const download = (format: string) => `/api/admin/tasks/${props.taskId}/artifacts
 </script>
 
 <template>
-  <section class="panel patch-review"><div class="section-heading"><h2>03 / 确认修改计划</h2><span class="badge">{{ review.plan ? `版本 ${review.plan.version}` : '尚未保存' }}</span></div>
+  <section class="panel patch-review"><div class="section-heading"><h2>确认修改计划</h2><span class="badge">{{ review.plan ? `版本 ${review.plan.version}` : '尚未保存' }}</span></div>
     <p class="muted">先保存具体步骤和精确路径，再确认 Commit 与计划哈希。每版计划最多发起一次生成，修改后必须重新确认。</p>
     <p class="commit-sha">固定 Commit {{ baseSha }}</p>
     <form @submit.prevent="save"><label>修改步骤（每行一条）<textarea v-model="steps" rows="4" required maxlength="12000" :disabled="active || busy"></textarea></label><label>允许修改的路径（每行一个）<textarea v-model="paths" rows="3" required maxlength="12000" :disabled="active || busy"></textarea></label>
@@ -60,10 +61,10 @@ const download = (format: string) => `/api/admin/tasks/${props.taskId}/artifacts
     <p v-if="phase === 'PATCH' && ['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(status)" class="config-tip">本次生成未完成或未通过检查。核对失败原因后保存新计划版本并重新确认；超范围路径需要新的源码分析。旧版不自动重放。</p>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
   </section>
-  <section v-if="review.artifact" class="panel patch-review"><div class="section-heading"><h2>04 / 补丁审核包</h2><span class="badge">UNVERIFIED</span></div><p class="config-tip">未应用、未编译、未测试。静态检查通过不等于补丁可运行；人工审核也不会改写这个结论。</p><p class="muted">来源 {{ review.artifact.bundle.source }} · 人工审核 {{ { PENDING: '待审核', REVIEWED: '已审核', REJECTED: '已拒绝' }[review.artifact.reviewStatus] }} · {{ review.artifact.bytes }} 字节</p><p class="commit-sha">审核包 SHA-256 {{ review.artifact.hash }}</p>
+  <section v-if="review.artifact" class="panel patch-review"><div class="section-heading"><h2>补丁审核包</h2><span class="badge">待验证</span></div><p class="config-tip">未应用、未编译、未测试。静态检查通过不等于补丁可运行；人工审核也不会改写这个结论。</p><p class="muted">来源 {{ review.artifact.bundle.source }} · 人工审核 {{ { PENDING: '待审核', REVIEWED: '已审核', REJECTED: '已拒绝' }[review.artifact.reviewStatus] }} · {{ review.artifact.bytes }} 字节</p><p class="commit-sha">审核包 SHA-256 {{ review.artifact.hash }}</p>
     <details open><summary>统一 Diff</summary><pre class="diff-code">{{ review.artifact.bundle.patch.diff }}</pre></details><details><summary>PR 文案草稿</summary><pre>{{ review.artifact.bundle.prDraft }}</pre></details><details><summary>非执行性检查</summary><pre>{{ JSON.stringify(review.artifact.bundle.checks, null, 2) }}</pre></details>
     <div v-if="review.artifact.bindingValid && review.artifact.reviewStatus !== 'REJECTED'" class="download-row"><a :href="download('bundle')" download>下载审核包 JSON ↗</a><a :href="download('diff')" download>下载 UNVERIFIED.patch ↗</a><a :href="download('pr')" download>下载 PR 草稿 ↗</a></div><p v-else class="notice">该审核包已失效或被拒绝，不能下载。</p>
     <div class="action-row"><button :disabled="busy || !review.artifact.bindingValid" @click="reviewArtifact('REVIEWED')">记录为已人工审核</button><button :disabled="busy || !review.artifact.bindingValid" @click="reviewArtifact('REJECTED')">拒绝此审核包</button></div>
   </section>
-  <section class="panel patch-review"><h2>05 / 手工 PR 记录</h2><p class="muted">由你在 GitHub 手动提交后填写。记录来源始终为 MANUAL，本站不会创建 PR 或核验远端状态。</p><form @submit.prevent="run(() => api(`admin/tasks/${taskId}/manual-pr`, 'PUT', { url: prUrl, status: prStatus }), '已保存 MANUAL 记录，未向 GitHub 核验。')"><label>手工 PR 链接<input v-model.trim="prUrl" type="url" required maxlength="500" placeholder="https://github.com/owner/repo/pull/123"></label><label>手工记录状态<select v-model="prStatus"><option value="DRAFT">草稿</option><option value="OPEN">已打开</option><option value="MERGED">已合并</option><option value="CLOSED">已关闭</option></select></label><button :disabled="busy">保存手工 PR 记录</button></form><p v-if="review.manualPr" class="config-tip">MANUAL · {{ review.manualPr.status }} · <a :href="review.manualPr.url" target="_blank" rel="noopener noreferrer">{{ review.manualPr.url }}</a></p></section>
+  <section class="panel patch-review"><h2>关联 GitHub PR</h2><p class="muted">由你在 GitHub 手动提交后填写。本站仅保存你填写的链接和状态，不会代为提交或核验 GitHub 状态。</p><form @submit.prevent="run(() => api(`admin/tasks/${taskId}/manual-pr`, 'PUT', { url: prUrl, status: prStatus }), 'PR 记录已保存，GitHub 状态需自行核对。')"><label>手工 PR 链接<input v-model.trim="prUrl" type="url" required maxlength="500" placeholder="https://github.com/owner/repo/pull/123"></label><label>手工记录状态<select v-model="prStatus"><option value="DRAFT">草稿</option><option value="OPEN">已打开</option><option value="MERGED">已合并</option><option value="CLOSED">已关闭</option></select></label><button :disabled="busy">保存手工 PR 记录</button></form><p v-if="review.manualPr" class="config-tip">手动记录 · {{ display(review.manualPr.status) }} · <a :href="review.manualPr.url" target="_blank" rel="noopener noreferrer">{{ review.manualPr.url }}</a></p></section>
 </template>
